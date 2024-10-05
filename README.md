@@ -1,4 +1,4 @@
-# Automation Generator Beta
+# Automation Generator
 
 This application allows users to upload an SOP based pdf, which lets them create an Automation around it, by providing a block daigram (text based), a script and list of pre-requisites to run the script, The AI being utilized here is Gemini-pro.
 
