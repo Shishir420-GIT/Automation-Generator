@@ -1,0 +1,6 @@
+pandas<2,>=0.25
+numpy<2,>=1.26.0
+PyPDF2
+tenacity
+streamlit
+google.generativeai
