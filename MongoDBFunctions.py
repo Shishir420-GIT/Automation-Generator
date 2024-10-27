@@ -2,10 +2,9 @@ import streamlit as st
 import os
 from datetime import datetime
 from pymongo import MongoClient
-
 class MongoDB:
     def __init__(self):
-        self.client = MongoClient(os.environ["mongoDB_URI"])
+        self.client = MongoClient(st.secrets["mongoDB_URI"])
         self.db = self.client["Automation"]
         self.collection = self.db["solutions"]
 

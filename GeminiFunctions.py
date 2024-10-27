@@ -8,8 +8,8 @@ class GenerativeFunction:
     def __init__(self):
         # Configure the Gemini API (you'll need to set up your API key)
         try:
-            genai.configure(api_key=os.environ["API_KEY"])
-            #genai.configure(api_key=st.secrets["API_KEY"])
+            #genai.configure(api_key=os.environ["API_KEY"])
+            genai.configure(api_key=st.secrets["API_KEY"])
         except:
             st.error("API_KEY is not set in the environment variables. Please set it and restart the application.")
             st.stop()
