@@ -73,3 +73,5 @@ Enhancement Under Progress.
 
 - This application uses Gemini API Key Bedrock, which may incur costs. Please review Gemini pricing before extended use.
 - Ensure your Google cloud project is created properly and is attached to a Billing.
+
+- Pagination Enhancement is taking time, but it will come soon.
