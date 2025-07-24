@@ -164,3 +164,7 @@ cython_debug/
 
 mongodbfile.py
 secrets.json
+*secrets.yaml
+
+# Streamlit secrets
+.streamlit/secrets.toml
