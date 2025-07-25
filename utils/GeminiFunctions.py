@@ -7,6 +7,7 @@ import logging
 import time
 from typing import Optional, Dict, Any
 import re
+from .mermaid_renderer import FlowchartGenerator
 
 class GenerativeFunction:
     def __init__(self):
@@ -33,6 +34,9 @@ class GenerativeFunction:
             HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
             HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE
         }
+        
+        # Initialize Mermaid flowchart generator
+        self.flowchart_generator = FlowchartGenerator()
     
     def _initialize_api(self):
         """Initialize Gemini API with proper error handling"""
@@ -469,3 +473,177 @@ class GenerativeFunction:
             
         except Exception as e:
             return self._handle_api_error(e, operation)
+    
+    def gemini_generate_mermaid_diagram(self, summary: str, domain: str, extra_info: str = "", complexity: str = "moderate") -> Optional[str]:
+        """Generate Mermaid flowchart diagram using AI enhancement and fallback generation"""
+        operation = "Mermaid diagram generation"
+        
+        # Validate inputs
+        if not self._validate_inputs(summary, domain, operation):
+            return None
+        
+        try:
+            # First try AI-enhanced generation
+            ai_generated = self._generate_ai_mermaid_diagram(summary, domain, extra_info, complexity)
+            
+            if ai_generated and self._validate_mermaid_syntax(ai_generated):
+                self.logger.info(f"Successfully generated AI-enhanced Mermaid diagram for {domain} domain")
+                return ai_generated
+            
+            # Fallback to template-based generation
+            self.logger.info("AI generation failed or invalid, using template-based fallback")
+            fallback_diagram = self.flowchart_generator.generate_automation_flowchart(summary, domain, complexity)
+            
+            if fallback_diagram:
+                self.logger.info(f"Successfully generated template-based Mermaid diagram for {domain} domain")
+                return fallback_diagram
+            
+            # Final fallback
+            return self.flowchart_generator._create_default_diagram()
+            
+        except Exception as e:
+            self.logger.error(f"Mermaid diagram generation failed: {str(e)}")
+            return self.flowchart_generator._create_error_diagram(str(e))
+    
+    def _generate_ai_mermaid_diagram(self, summary: str, domain: str, extra_info: str, complexity: str) -> Optional[str]:
+        """Generate Mermaid diagram using AI with specific prompts"""
+        try:
+            prompt = f"""
+            Create a valid Mermaid flowchart for {domain} automation based on this summary.
+            
+            Complexity: {complexity}
+            Context: {extra_info}
+            Summary: {summary[:2000]}
+            
+            STRICT SYNTAX REQUIREMENTS:
+            1. Start with: flowchart TD
+            2. Node formats:
+               - Start/End: A(["Label Text"])
+               - Process: B["Label Text"]  
+               - Decision: C{{"Question?"}}
+               - Error: D["Error Text"]
+            3. Connections: A --> B
+            4. Edge labels: A -->|"Yes"| B
+            5. All labels MUST be in quotes
+            6. No special characters in node IDs (A-Z, 0-9 only)
+            7. Keep labels under 40 characters
+            
+            EXAMPLE STRUCTURE:
+            flowchart TD
+                A(["Start Process"]) --> B["Validate Input"]
+                B --> C{{"Input Valid?"}}
+                C -->|"Yes"| D["Process Data"]
+                C -->|"No"| E["Show Error"]
+                D --> F(["Complete"])
+                E --> F
+            
+            Generate ONLY the Mermaid code, no explanations.
+            Use exactly this format with proper quotes and syntax.
+            """
+            
+            result = self.gemini_generate_content(prompt, operation="AI Mermaid generation")
+            
+            if result:
+                # Clean the result to ensure it's pure Mermaid syntax
+                cleaned_result = self._clean_ai_mermaid_output(result)
+                return cleaned_result
+            
+            return None
+            
+        except Exception as e:
+            self.logger.error(f"AI Mermaid generation failed: {str(e)}")
+            return None
+    
+    def _clean_ai_mermaid_output(self, ai_output: str) -> str:
+        """Clean AI output to extract pure Mermaid syntax"""
+        lines = ai_output.split('\n')
+        mermaid_lines = []
+        in_code_block = False
+        found_flowchart = False
+        
+        for line in lines:
+            stripped = line.strip()
+            
+            # Check for code block markers
+            if stripped.startswith('```'):
+                in_code_block = not in_code_block
+                continue
+            
+            # Skip explanatory text before flowchart
+            if not found_flowchart and not stripped.startswith('flowchart'):
+                continue
+            
+            # Found flowchart directive
+            if stripped.startswith('flowchart'):
+                found_flowchart = True
+                mermaid_lines.append(stripped)
+                continue
+            
+            # If we're in flowchart and line looks like Mermaid syntax
+            if found_flowchart:
+                # Skip empty lines and comments
+                if not stripped or stripped.startswith('#'):
+                    continue
+                
+                # Stop if we hit explanatory text
+                if any(word in stripped.lower() for word in ['explanation', 'this diagram', 'the flowchart', 'note:', 'this shows']):
+                    break
+                
+                # Clean the line for proper syntax
+                cleaned_line = self._clean_mermaid_line(stripped)
+                if cleaned_line:
+                    mermaid_lines.append(cleaned_line)
+        
+        result = '\n'.join(mermaid_lines)
+        
+        # Ensure we have a valid start
+        if not result.strip().startswith('flowchart'):
+            result = f"flowchart TD\n{result}"
+        
+        return result
+    
+    def _clean_mermaid_line(self, line: str) -> str:
+        """Clean individual Mermaid line for syntax correctness"""
+        import re
+        
+        # Skip style and empty lines
+        if line.startswith('style ') or not line.strip():
+            return line
+        
+        # Fix common syntax issues
+        # Ensure node labels are properly quoted
+        line = re.sub(r'\[([^"]*)\]', r'["\1"]', line)
+        line = re.sub(r'\(\[([^"]*)\]\)', r'(["\1"])', line)
+        line = re.sub(r'\{\{([^"]*)\}\}', r'{{"?\1"}', line)
+        
+        # Fix edge labels
+        line = re.sub(r'\|\s*([^"]+?)\s*\|', r'|"\1"|', line)
+        
+        # Remove problematic characters from labels
+        line = re.sub(r'[<>{}\\]', '', line)
+        
+        return line
+    
+    def _validate_mermaid_syntax(self, mermaid_code: str) -> bool:
+        """Basic validation of Mermaid syntax"""
+        if not mermaid_code or not mermaid_code.strip():
+            return False
+        
+        lines = [line.strip() for line in mermaid_code.split('\n') if line.strip()]
+        
+        # Must start with flowchart directive
+        if not any(line.startswith('flowchart') for line in lines[:3]):
+            return False
+        
+        # Should have some node definitions and connections
+        has_nodes = any('-->' in line or '[' in line or '(' in line or '{' in line for line in lines)
+        
+        return has_nodes
+    
+    def convert_text_diagram_to_mermaid(self, text_diagram: str, automation_type: str = "process") -> str:
+        """Convert existing text-based diagrams to Mermaid format"""
+        try:
+            return self.flowchart_generator.text_to_mermaid(text_diagram, automation_type)
+        except Exception as e:
+            self.logger.error(f"Text to Mermaid conversion failed: {str(e)}")
+            return self.flowchart_generator._create_error_diagram(str(e))

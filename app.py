@@ -1,8 +1,9 @@
 import streamlit as st
 import PyPDF2
-from GeminiFunctions import GenerativeFunction
-from MongoDBFunctions import MongoDB
+from utils.GeminiFunctions import GenerativeFunction
+from utils.MongoDBFunctions import MongoDB
 from utils.validators import InputValidator
+from utils.mermaid_renderer import MermaidRenderer
 import time
 
 # Page configuration - MUST be first Streamlit command

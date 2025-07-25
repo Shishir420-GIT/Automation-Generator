@@ -1,5 +1,8 @@
 import streamlit as st
 import PyPDF2
+# NOTE: These imports are now located in the utils folder
+# from utils.MongoDBFunctions import MongoDB  
+# from utils.GeminiFunctions import GenerativeFunction
 from MongoDBFunctions import MongoDB
 from GeminiFunctions import GenerativeFunction
 
