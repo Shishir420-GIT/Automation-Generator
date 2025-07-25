@@ -509,36 +509,66 @@ class GenerativeFunction:
         """Generate Mermaid diagram using AI with specific prompts"""
         try:
             prompt = f"""
-            Create a valid Mermaid flowchart for {domain} automation based on this summary.
+            Create a COMPLEX Mermaid flowchart for {domain} automation with branching, loops, and error handling.
             
+            Domain: {domain}
+            Summary: {summary[:1500]}
             Complexity: {complexity}
-            Context: {extra_info}
-            Summary: {summary[:2000]}
             
-            STRICT SYNTAX REQUIREMENTS:
+            REQUIREMENTS FOR COMPLEX FLOW:
+            1. Multiple decision points with Yes/No branches
+            2. Error handling with retry loops
+            3. Parallel processing paths where applicable
+            4. Proper error states and recovery mechanisms
+            5. Realistic automation workflow structure
+            
+            MANDATORY SYNTAX RULES:
             1. Start with: flowchart TD
             2. Node formats:
-               - Start/End: A(["Label Text"])
-               - Process: B["Label Text"]  
-               - Decision: C{{"Question?"}}
-               - Error: D["Error Text"]
+               - Start/End: A(["Start Process"])
+               - Process: B["Process Step"]  
+               - Decision: C{{"Validation Check?"}}
+               - Error: D["Error Handler"]
             3. Connections: A --> B
-            4. Edge labels: A -->|"Yes"| B
-            5. All labels MUST be in quotes
-            6. No special characters in node IDs (A-Z, 0-9 only)
-            7. Keep labels under 40 characters
+            4. Conditional edges: C -->|"Yes"| D and C -->|"No"| E
+            5. ALL labels in double quotes
+            6. Use meaningful node IDs (A-Z, numbers)
             
-            EXAMPLE STRUCTURE:
+            EXAMPLE COMPLEX STRUCTURE:
+            ```
             flowchart TD
-                A(["Start Process"]) --> B["Validate Input"]
-                B --> C{{"Input Valid?"}}
-                C -->|"Yes"| D["Process Data"]
-                C -->|"No"| E["Show Error"]
-                D --> F(["Complete"])
-                E --> F
+                A(["Start: {domain} Process"]) --> B["Initialize System"]
+                B --> C["Load Configuration"]
+                C --> D{{"Config Valid?"}}
+                D -->|"No"| E["Show Config Error"]
+                D -->|"Yes"| F["Connect to Service"]
+                F --> G{{"Connection Success?"}}
+                G -->|"No"| H["Retry Connection"]
+                G -->|"Yes"| I["Authenticate User"]
+                H --> J{{"Max Retries Reached?"}}
+                J -->|"No"| F
+                J -->|"Yes"| K["Connection Failed"]
+                I --> L{{"Authentication Success?"}}
+                L -->|"No"| M["Handle Auth Error"]
+                L -->|"Yes"| N["Process Main Task"]
+                N --> O{{"Processing Success?"}}
+                O -->|"Yes"| P["Generate Results"]
+                O -->|"No"| Q["Handle Processing Error"]
+                P --> R["Save Output"]
+                R --> S(["Success: Complete"])
+                E --> T(["End: Config Error"])
+                K --> U(["End: Connection Failed"])
+                M --> V(["End: Auth Failed"])
+                Q --> W(["End: Processing Failed"])
+            ```
             
-            Generate ONLY the Mermaid code, no explanations.
-            Use exactly this format with proper quotes and syntax.
+            Create a similar complex flow for the {domain} domain with:
+            - At least 3-5 decision points
+            - 2-3 error handling paths
+            - 1-2 retry mechanisms
+            - Multiple end states
+            
+            Return ONLY the flowchart code. NO explanations.
             """
             
             result = self.gemini_generate_content(prompt, operation="AI Mermaid generation")
@@ -614,18 +644,22 @@ class GenerativeFunction:
         # Ensure node labels are properly quoted
         line = re.sub(r'\[([^"]*)\]', r'["\1"]', line)
         line = re.sub(r'\(\[([^"]*)\]\)', r'(["\1"])', line)
-        line = re.sub(r'\{\{([^"]*)\}\}', r'{{"?\1"}', line)
+        line = re.sub(r'\{\{([^"]*)\}\}', r'{{"\1"}}', line)
+        
+        # Convert single braces to double braces for decision nodes (Mermaid requirement)
+        line = re.sub(r'([A-Z0-9]+)\{([^}]*)\}', r'\1{{"\2"}}', line)
         
         # Fix edge labels
         line = re.sub(r'\|\s*([^"]+?)\s*\|', r'|"\1"|', line)
         
-        # Remove problematic characters from labels
-        line = re.sub(r'[<>{}\\]', '', line)
+        # Only remove backslashes which can break Mermaid syntax
+        # Keep < > { } as they are essential for Mermaid arrows and decision nodes
+        line = re.sub(r'\\', '', line)
         
         return line
     
     def _validate_mermaid_syntax(self, mermaid_code: str) -> bool:
-        """Basic validation of Mermaid syntax"""
+        """Enhanced validation of Mermaid syntax"""
         if not mermaid_code or not mermaid_code.strip():
             return False
         
@@ -634,6 +668,33 @@ class GenerativeFunction:
         # Must start with flowchart directive
         if not any(line.startswith('flowchart') for line in lines[:3]):
             return False
+        
+        # Check for common syntax errors
+        for line in lines[1:]:  # Skip the flowchart directive
+            if not line or line.startswith('style '):
+                continue
+                
+            # Check for unquoted labels in nodes
+            if '[' in line and ']' in line:
+                # Extract content between brackets
+                bracket_matches = re.findall(r'\[([^\]]*)\]', line)
+                for match in bracket_matches:
+                    if match and not (match.startswith('"') and match.endswith('"')):
+                        return False
+            
+            # Check for unquoted labels in decision nodes
+            if '{{' in line and '}}' in line:
+                decision_matches = re.findall(r'\{\{([^}]*)\}\}', line)
+                for match in decision_matches:
+                    if match and not (match.startswith('"') and match.endswith('"')):
+                        return False
+            
+            # Check for unquoted edge labels
+            if '|' in line and '-->' in line:
+                edge_matches = re.findall(r'\|([^|]*)\|', line)
+                for match in edge_matches:
+                    if match and not (match.strip().startswith('"') and match.strip().endswith('"')):
+                        return False
         
         # Should have some node definitions and connections
         has_nodes = any('-->' in line or '[' in line or '(' in line or '{' in line for line in lines)

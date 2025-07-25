@@ -424,28 +424,51 @@ class FlowchartGenerator:
     style F fill:#e8f5e8,stroke:#4caf50"""
     
     def _generate_moderate_flowchart(self, summary: str, domain: str) -> str:
-        """Generate a moderate complexity flowchart"""
+        """Generate a moderate complexity flowchart with branching and error handling"""
         clean_domain = self._sanitize_label(domain)
         return f"""flowchart TD
-    A(["Start: {clean_domain} Automation"]) --> B["Load Configuration"]
-    B --> C["Validate Input Data"]
-    C --> D{{"Data Valid?"}}
-    D -->|"Yes"| E["Process Data"]
-    D -->|"No"| F["Log Error & Notify"]
-    E --> G["Apply Business Rules"]
-    G --> H["Generate Output"]
-    H --> I["Save Results"]
-    I --> J{{"Save Successful?"}}
-    J -->|"Yes"| K["Send Notifications"]
-    J -->|"No"| L["Retry Logic"]
-    L --> I
-    K --> M(["Process Complete"])
-    F --> N(["End with Error"])
+    A(["Start: {clean_domain} Automation"]) --> B["Initialize System"]
+    B --> C["Load Configuration"]
+    C --> D{{"Config Valid?"}}
+    D -->|"No"| E["Handle Config Error"]
+    D -->|"Yes"| F["Connect to Service"]
+    F --> G{{"Connection Success?"}}
+    G -->|"No"| H["Retry Connection"]
+    G -->|"Yes"| I["Validate Input Data"]
+    H --> J{{"Max Retries?"}}
+    J -->|"No"| F
+    J -->|"Yes"| K["Connection Failed"]
+    I --> L{{"Data Valid?"}}
+    L -->|"No"| M["Data Validation Error"]
+    L -->|"Yes"| N["Process Data"]
+    N --> O["Apply Business Rules"]
+    O --> P{{"Processing Success?"}}
+    P -->|"Yes"| Q["Generate Output"]
+    P -->|"No"| R["Handle Processing Error"]
+    Q --> S["Save Results"]
+    S --> T{{"Save Successful?"}}
+    T -->|"Yes"| U["Send Notifications"]
+    T -->|"No"| V["Retry Save"]
+    V --> W{{"Retry Limit Reached?"}}
+    W -->|"No"| S
+    W -->|"Yes"| X["Save Failed"]
+    U --> Y(["Success: Process Complete"])
+    E --> Z1(["End: Config Error"])
+    K --> Z2(["End: Connection Failed"])
+    M --> Z3(["End: Data Invalid"])
+    R --> Z4(["End: Processing Failed"])
+    X --> Z5(["End: Save Failed"])
     
     style A fill:#e3f2fd,stroke:#1976d2
-    style M fill:#e8f5e8,stroke:#4caf50
-    style N fill:#ffebee,stroke:#d32f2f
-    style F fill:#fff3e0,stroke:#ff9800"""
+    style Y fill:#e8f5e8,stroke:#4caf50
+    style Z1 fill:#ffebee,stroke:#d32f2f
+    style Z2 fill:#ffebee,stroke:#d32f2f
+    style Z3 fill:#ffebee,stroke:#d32f2f
+    style Z4 fill:#ffebee,stroke:#d32f2f
+    style Z5 fill:#ffebee,stroke:#d32f2f
+    style E fill:#fff3e0,stroke:#ff9800
+    style M fill:#fff3e0,stroke:#ff9800
+    style R fill:#fff3e0,stroke:#ff9800"""
     
     def _generate_complex_flowchart(self, summary: str, domain: str) -> str:
         """Generate a complex flowchart with multiple decision points"""

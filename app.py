@@ -712,19 +712,16 @@ def show_create_automation_interface(gemini, mongo_db):
                         
                         try:
                             # Step 1: Generate diagrams (both text and Mermaid)
-                            status_text.text("📊 Creating process flow diagrams...")
-                            progress_bar.progress(0.15)
-                            time.sleep(0.5)
-                            
-                            block_diagram = gemini.gemini_generate_block_diagram(summary, domain, extra_info)
-                            
-                            status_text.text("🎨 Creating interactive Mermaid diagram...")
-                            progress_bar.progress(0.25)
+                            status_text.text("🎨 Creating interactive Mermaid flowchart...")
+                            progress_bar.progress(0.20)
                             time.sleep(0.5)
                             
                             # Get complexity level from advanced options if available
                             complexity_level = st.session_state.get('complexity_level', 'moderate')
                             mermaid_diagram = gemini.gemini_generate_mermaid_diagram(summary, domain, extra_info, complexity_level)
+                            
+                            # Create text representation of the Mermaid diagram for reference
+                            block_diagram = f"Process Flow Description:\n\nThis automation generates an interactive Mermaid flowchart with the following features:\n- Complex branching logic with decision points\n- Error handling and retry mechanisms\n- Multiple end states for different scenarios\n- Visual representation of the {domain} automation workflow\n\nThe interactive diagram shows the complete process flow with proper error handling and decision paths."
                             
                             # Step 2: Script Generation  
                             status_text.text("💻 Generating automation script...")
@@ -801,7 +798,7 @@ def display_automation_results(block_diagram, mermaid_diagram, script, unit_test
     st.subheader("🎉 Generated Automation Components")
     
     # Tabs for organized display
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(["🎨 Interactive Diagram", "📊 Text Diagram", "💻 Script & Tests", "📋 Prerequisites", "💾 Downloads"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["🎨 Interactive Diagram", "📝 Process Description", "💻 Script & Tests", "📋 Prerequisites", "💾 Downloads"])
     
     with tab1:
         st.markdown("**🎨 Interactive Mermaid Flowchart:**")
@@ -854,15 +851,21 @@ def display_automation_results(block_diagram, mermaid_diagram, script, unit_test
             st.info("This might happen due to API limitations or content complexity. The text diagram provides the same information in a different format.")
     
     with tab2:
-        st.markdown("**📊 Text-Based Process Diagram:**")
-        st.code(block_diagram, language="text")
+        st.markdown("**📝 Process Flow Description:**")
+        st.info(block_diagram)
         
-        with st.expander("ℹ️ How to read this diagram"):
+        with st.expander("ℹ️ About the Interactive Diagram"):
             st.info("""
-            This text-based diagram shows the flow of your automation process:
-            - Boxes represent process steps
-            - Arrows show the sequence of operations
-            - Decision points show where the process branches
+            The interactive Mermaid diagram provides:
+            - **Visual flowchart** with proper shapes and connections
+            - **Decision points** shown as diamond shapes
+            - **Process steps** shown as rectangles  
+            - **Start/End points** shown as rounded rectangles
+            - **Error handling paths** with retry logic
+            - **Conditional branches** with Yes/No labels
+            - **Multiple end states** for different outcomes
+            
+            This replaces traditional ASCII text diagrams with modern, interactive visualizations.
             """)
     
     with tab3:
