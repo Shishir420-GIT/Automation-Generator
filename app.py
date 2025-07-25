@@ -175,7 +175,8 @@ def init_components():
     try:
         gemini = GenerativeFunction()
         mongo_db = MongoDB()
-        return gemini, mongo_db
+        mermaid_renderer = MermaidRenderer()
+        return gemini, mongo_db, mermaid_renderer
     except Exception as e:
         st.error(f"❌ Failed to initialize components: {str(e)}")
         st.stop()
@@ -656,7 +657,7 @@ def show_create_automation_interface(gemini, mongo_db):
                     if st.button(
                         "⚙️ Advanced Options",
                         use_container_width=True,
-                        help="Show advanced generation options"
+                        help="Show advanced generation options including Mermaid diagrams"
                     ):
                         st.session_state.show_advanced = not st.session_state.get('show_advanced', False)
                 
@@ -670,7 +671,8 @@ def show_create_automation_interface(gemini, mongo_db):
                                 "Complexity Level",
                                 ["Simple", "Moderate", "Complex", "Expert"],
                                 index=1,
-                                help="Choose the complexity level for generated automation"
+                                help="Choose the complexity level for generated automation",
+                                key="complexity_level"
                             )
                             
                             include_tests = st.checkbox(
@@ -709,12 +711,20 @@ def show_create_automation_interface(gemini, mongo_db):
                         status_text = st.empty()
                         
                         try:
-                            # Step 1: Block Diagram
-                            status_text.text("📊 Creating process flow diagram...")
-                            progress_bar.progress(0.2)
+                            # Step 1: Generate diagrams (both text and Mermaid)
+                            status_text.text("📊 Creating process flow diagrams...")
+                            progress_bar.progress(0.15)
                             time.sleep(0.5)
                             
                             block_diagram = gemini.gemini_generate_block_diagram(summary, domain, extra_info)
+                            
+                            status_text.text("🎨 Creating interactive Mermaid diagram...")
+                            progress_bar.progress(0.25)
+                            time.sleep(0.5)
+                            
+                            # Get complexity level from advanced options if available
+                            complexity_level = st.session_state.get('complexity_level', 'moderate')
+                            mermaid_diagram = gemini.gemini_generate_mermaid_diagram(summary, domain, extra_info, complexity_level)
                             
                             # Step 2: Script Generation  
                             status_text.text("💻 Generating automation script...")
@@ -747,7 +757,7 @@ def show_create_automation_interface(gemini, mongo_db):
                             status_text.empty()
                             
                             # Display results in tabs
-                            display_automation_results(block_diagram, script, unit_tests, prerequisites, domain, summary, mongo_db, extra_info)
+                            display_automation_results(block_diagram, mermaid_diagram, script, unit_tests, prerequisites, domain, summary, mongo_db, extra_info)
                         
                         except Exception as e:
                             progress_bar.empty()
@@ -784,17 +794,67 @@ def show_create_automation_interface(gemini, mongo_db):
         </div>
         """, unsafe_allow_html=True)
 
-def display_automation_results(block_diagram, script, unit_tests, prerequisites, domain, summary, mongo_db, extra_info):
-    """Display generated automation results"""
+def display_automation_results(block_diagram, mermaid_diagram, script, unit_tests, prerequisites, domain, summary, mongo_db, extra_info):
+    """Display generated automation results with enhanced visual diagrams"""
     
     st.markdown("---")
     st.subheader("🎉 Generated Automation Components")
     
     # Tabs for organized display
-    tab1, tab2, tab3, tab4 = st.tabs(["📊 Flow Diagram", "💻 Script & Tests", "📋 Prerequisites", "💾 Downloads"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["🎨 Interactive Diagram", "📊 Text Diagram", "💻 Script & Tests", "📋 Prerequisites", "💾 Downloads"])
     
     with tab1:
-        st.markdown("**Process Flow Diagram:**")
+        st.markdown("**🎨 Interactive Mermaid Flowchart:**")
+        
+        if mermaid_diagram:
+            # Get current theme for Mermaid rendering
+            mermaid_theme = 'dark' if st.session_state.theme == 'dark' else 'default'
+            
+            # Initialize mermaid renderer
+            mermaid_renderer = MermaidRenderer()
+            
+            # Validate diagram before rendering
+            if mermaid_diagram.strip().startswith('flowchart'):
+                # Render the diagram
+                try:
+                    mermaid_renderer.render_mermaid(mermaid_diagram, theme=mermaid_theme, height=500)
+                except Exception as e:
+                    st.error(f"❌ **Diagram Rendering Failed**: {str(e)}")
+                    st.info("💡 **Fallback**: Check the Text Diagram tab for the process flow.")
+                    st.code(mermaid_diagram, language="text")
+            else:
+                st.warning("⚠️ **Invalid Diagram Format**: Generated diagram may have syntax issues.")
+                st.code(mermaid_diagram, language="text")
+            
+            # Show diagram controls
+            col1, col2, col3 = st.columns([2, 1, 1])
+            
+            with col1:
+                st.markdown("**💡 Tip:** This interactive diagram shows the automation process flow with clickable elements and visual styling.")
+            
+            with col2:
+                # Theme toggle for diagram
+                if st.button("🎨 Switch Diagram Theme", help="Toggle between light and dark diagram themes"):
+                    # Re-render with opposite theme
+                    opposite_theme = 'default' if mermaid_theme == 'dark' else 'dark'
+                    mermaid_renderer.render_mermaid(mermaid_diagram, theme=opposite_theme, height=500)
+            
+            with col3:
+                # Download diagram
+                download_link = mermaid_renderer.create_download_link(mermaid_diagram, f"{domain.lower().replace(' ', '_')}_diagram.mmd")
+                if download_link:
+                    st.markdown(download_link, unsafe_allow_html=True)
+            
+            # Show raw Mermaid code in expander
+            with st.expander("🔧 View Mermaid Source Code"):
+                st.code(mermaid_diagram, language="text")
+                st.info("💡 You can copy this code and use it in other Mermaid-compatible tools or modify it as needed.")
+        else:
+            st.warning("⚠️ Interactive diagram generation failed. Please see the text diagram in the next tab.")
+            st.info("This might happen due to API limitations or content complexity. The text diagram provides the same information in a different format.")
+    
+    with tab2:
+        st.markdown("**📊 Text-Based Process Diagram:**")
         st.code(block_diagram, language="text")
         
         with st.expander("ℹ️ How to read this diagram"):
@@ -805,7 +865,7 @@ def display_automation_results(block_diagram, script, unit_tests, prerequisites,
             - Decision points show where the process branches
             """)
     
-    with tab2:
+    with tab3:
         # Two columns for script and tests
         col1, col2 = st.columns(2)
         
@@ -817,15 +877,15 @@ def display_automation_results(block_diagram, script, unit_tests, prerequisites,
             st.markdown("**🧪 Unit Tests:**")
             st.code(unit_tests, language='python')
     
-    with tab3:
+    with tab4:
         st.markdown("**📋 Prerequisites & Setup Requirements:**")
         st.markdown(prerequisites)
     
-    with tab4:
+    with tab5:
         st.markdown("**💾 Download Generated Files:**")
         
         # Download buttons
-        col1, col2, col3 = st.columns(3)
+        col1, col2, col3, col4 = st.columns(4)
         
         with col1:
             st.download_button(
@@ -846,6 +906,18 @@ def display_automation_results(block_diagram, script, unit_tests, prerequisites,
             )
         
         with col3:
+            if mermaid_diagram:
+                st.download_button(
+                    "📥 Download Diagram",
+                    mermaid_diagram,
+                    file_name=f"diagram_{domain.lower().replace(' ', '_')}.mmd",
+                    mime="text/plain",
+                    use_container_width=True
+                )
+            else:
+                st.button("📥 Diagram N/A", disabled=True, use_container_width=True)
+        
+        with col4:
             # Combined package
             combined_content = f"""# Automation Package for {domain}
 # Generated on {time.strftime('%Y-%m-%d %H:%M:%S')}
@@ -862,8 +934,11 @@ def display_automation_results(block_diagram, script, unit_tests, prerequisites,
 ## UNIT TESTS
 {unit_tests}
 
-## FLOW DIAGRAM
+## TEXT FLOW DIAGRAM
 {block_diagram}
+
+## MERMAID DIAGRAM
+{mermaid_diagram if mermaid_diagram else 'Not generated'}
 """
             st.download_button(
                 "📦 Download Package",
@@ -934,7 +1009,7 @@ def main():
     """, unsafe_allow_html=True)
     
     # Initialize components
-    gemini, mongo_db = init_components()
+    gemini, mongo_db, mermaid_renderer = init_components()
     
     # Create sidebar search
     create_sidebar_search(mongo_db)
