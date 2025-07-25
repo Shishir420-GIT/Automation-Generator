@@ -163,6 +163,7 @@ cython_debug/
 #.idea/
 
 mongodbfile.py
+.claude
 secrets.json
 *secrets.yaml
 
