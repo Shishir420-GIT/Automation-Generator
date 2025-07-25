@@ -1,10 +1,31 @@
 import streamlit as st
-import PyPDF2
-from utils.GeminiFunctions import GenerativeFunction
-from utils.MongoDBFunctions import MongoDB
-from utils.validators import InputValidator
-from utils.mermaid_renderer import MermaidRenderer
 import time
+
+# PDF processing with error handling
+try:
+    import PyPDF2
+    PDF_AVAILABLE = True
+except ImportError as e:
+    st.error(f"❌ **PDF Processing Error**: {str(e)}")
+    st.info("""
+    **To fix this issue:**
+    1. Install PyPDF2: `pip install PyPDF2==3.0.1`
+    2. Or reinstall requirements: `pip install -r requirements.txt`
+    3. Restart the Streamlit application
+    """)
+    PDF_AVAILABLE = False
+
+# Other imports with error handling
+try:
+    from utils.GeminiFunctions import GenerativeFunction
+    from utils.MongoDBFunctions import MongoDB
+    from utils.validators import InputValidator
+    from utils.mermaid_renderer import MermaidRenderer
+    UTILS_AVAILABLE = True
+except ImportError as e:
+    st.error(f"❌ **Utils Import Error**: {str(e)}")
+    st.info("Please ensure all utility modules are in the utils/ folder")
+    UTILS_AVAILABLE = False
 
 # Page configuration - MUST be first Streamlit command
 st.set_page_config(
@@ -172,6 +193,9 @@ def apply_theme_css():
 @st.cache_resource
 def init_components():
     """Initialize and cache expensive components"""
+    if not PDF_AVAILABLE or not UTILS_AVAILABLE:
+        return None, None, None, None
+        
     try:
         gemini = GenerativeFunction()
         mongo_db = MongoDB()
@@ -183,6 +207,10 @@ def init_components():
 
 def extract_text_from_pdf(pdf_file):
     """Enhanced PDF extraction with progress bar"""
+    if not PDF_AVAILABLE:
+        st.error("❌ PDF processing is not available due to missing PyPDF2")
+        return None
+        
     try:
         pdf_reader = PyPDF2.PdfReader(pdf_file)
         text = ""
