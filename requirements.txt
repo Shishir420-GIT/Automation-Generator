@@ -9,3 +9,6 @@ pymongo
 # Additional for enhanced UI
 streamlit-extras>=0.3.0
 plotly>=5.15.0
+
+# Enhanced error handling and validation
+python-magic>=0.4.27
