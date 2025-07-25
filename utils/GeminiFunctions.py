@@ -509,7 +509,7 @@ class GenerativeFunction:
         """Generate Mermaid diagram using AI with specific prompts"""
         try:
             prompt = f"""
-            Create a COMPLEX Mermaid flowchart for {domain} automation with branching, loops, and error handling.
+            Create a COMPLEX programming flowchart for {domain} automation using PROPER FLOWCHART SYMBOLS.
             
             Domain: {domain}
             Summary: {summary[:1500]}
@@ -522,44 +522,45 @@ class GenerativeFunction:
             4. Proper error states and recovery mechanisms
             5. Realistic automation workflow structure
             
-            MANDATORY SYNTAX RULES:
+            MANDATORY FLOWCHART SYNTAX RULES:
             1. Start with: flowchart TD
-            2. Node formats:
-               - Start/End: A(["Start Process"])
-               - Process: B["Process Step"]  
-               - Decision: C{{"Validation Check?"}}
-               - Error: D["Error Handler"]
+            2. PROPER FLOWCHART SYMBOLS:
+               - START/END (Oval): A(("Start"))
+               - PROCESS/TASK (Rectangle): B["Process Step"]  
+               - DECISION (Diamond): C{{"Input Valid?"}}
+               - INPUT/OUTPUT (Parallelogram): D[/"Read File"/]
+               - CONNECTOR (Circle): E((A))
             3. Connections: A --> B
             4. Conditional edges: C -->|"Yes"| D and C -->|"No"| E
             5. ALL labels in double quotes
             6. Use meaningful node IDs (A-Z, numbers)
             
-            EXAMPLE COMPLEX STRUCTURE:
+            EXAMPLE PROPER FLOWCHART STRUCTURE:
             ```
             flowchart TD
-                A(["Start: {domain} Process"]) --> B["Initialize System"]
-                B --> C["Load Configuration"]
+                A(("Start")) --> B[/"Read Input File"/]
+                B --> C["Initialize System"]
                 C --> D{{"Config Valid?"}}
-                D -->|"No"| E["Show Config Error"]
+                D -->|"No"| E["Display Error Message"]
                 D -->|"Yes"| F["Connect to Service"]
                 F --> G{{"Connection Success?"}}
-                G -->|"No"| H["Retry Connection"]
-                G -->|"Yes"| I["Authenticate User"]
-                H --> J{{"Max Retries Reached?"}}
-                J -->|"No"| F
-                J -->|"Yes"| K["Connection Failed"]
-                I --> L{{"Authentication Success?"}}
-                L -->|"No"| M["Handle Auth Error"]
-                L -->|"Yes"| N["Process Main Task"]
-                N --> O{{"Processing Success?"}}
-                O -->|"Yes"| P["Generate Results"]
-                O -->|"No"| Q["Handle Processing Error"]
-                P --> R["Save Output"]
-                R --> S(["Success: Complete"])
-                E --> T(["End: Config Error"])
-                K --> U(["End: Connection Failed"])
-                M --> V(["End: Auth Failed"])
-                Q --> W(["End: Processing Failed"])
+                G -->|"No"| H["Increment Retry Counter"]
+                H --> I{{"Max Retries?"}}
+                I -->|"No"| F
+                I -->|"Yes"| J["Log Connection Error"]
+                G -->|"Yes"| K[/"Input Credentials"/]
+                K --> L["Authenticate User"]
+                L --> M{{"Auth Success?"}}
+                M -->|"No"| N["Handle Auth Error"]
+                M -->|"Yes"| O["Process Main Task"]
+                O --> P{{"Processing Success?"}}
+                P -->|"Yes"| Q[/"Output Results"/]
+                P -->|"No"| R["Log Processing Error"]
+                Q --> S(("End: Success"))
+                E --> T(("End: Config Error"))
+                J --> U(("End: Connection Failed"))
+                N --> V(("End: Auth Failed"))
+                R --> W(("End: Processing Failed"))
             ```
             
             Create a similar complex flow for the {domain} domain with:

@@ -304,20 +304,28 @@ class FlowchartGenerator:
             node_counter += 1
             created_nodes.append(node_id)
             
-            # Determine node type and shape
+            # Determine node type and shape using proper flowchart symbols
             if any(keyword in clean_line.lower() for keyword in ['start', 'begin', 'initialize']):
-                mermaid_code += f'    {node_id}(["{clean_line}"])\n'
+                # Oval for start
+                mermaid_code += f'    {node_id}(("{clean_line}"))\n'
                 node_mapping['start'] = node_id
             elif any(keyword in clean_line.lower() for keyword in ['end', 'finish', 'complete', 'done']):
-                mermaid_code += f'    {node_id}(["{clean_line}"])\n'
+                # Oval for end
+                mermaid_code += f'    {node_id}(("{clean_line}"))\n'
                 node_mapping['end'] = node_id
-            elif any(keyword in clean_line.lower() for keyword in ['if', 'check', 'verify', 'validate', '?']):
+            elif any(keyword in clean_line.lower() for keyword in ['if', 'check', 'verify', 'validate', '?', 'decision']):
+                # Diamond for decision/conditional
                 mermaid_code += f'    {node_id}{{"{clean_line}"}}\n'
                 node_mapping['decision'] = node_id
+            elif any(keyword in clean_line.lower() for keyword in ['input', 'output', 'read', 'write', 'display', 'print']):
+                # Parallelogram for input/output
+                mermaid_code += f'    {node_id}[/"{clean_line}"\\]\n'
             elif any(keyword in clean_line.lower() for keyword in ['error', 'fail', 'exception']):
+                # Rectangle with error styling
                 mermaid_code += f'    {node_id}["{clean_line}"]\n'
                 mermaid_code += f'    style {node_id} fill:#ffebee,stroke:#d32f2f\n'
             else:
+                # Rectangle for process/task
                 mermaid_code += f'    {node_id}["{clean_line}"]\n'
         
         # Add connections (simplified sequential flow)
@@ -357,20 +365,24 @@ class FlowchartGenerator:
         return mermaid_code
     
     def _create_default_diagram(self) -> str:
-        """Create a default automation flowchart"""
+        """Create a default automation flowchart using proper symbols"""
         return """flowchart TD
-    A(["Start: Process Input"]) --> B["Validate Input Data"]
-    B --> C{{"Input Valid?"}}
-    C -->|"Yes"| D["Process Data"]
-    C -->|"No"| E["Return Error"]
-    D --> F["Generate Output"]
-    F --> G["Save Results"]
-    G --> H(["End: Process Complete"])
-    E --> H
+    A(("Start: Process Input")) --> B[/"Input: Read Data"/]
+    B --> C["Validate Input Data"]
+    C --> D{{"Input Valid?"}}
+    D -->|"Yes"| E["Process Data"]
+    D -->|"No"| F["Handle Error"]
+    E --> G[/"Output: Generate Results"/]
+    G --> H["Save Results"]
+    H --> I(("End: Process Complete"))
+    F --> I
     
-    style A fill:#e3f2fd,stroke:#1976d2
-    style H fill:#e8f5e8,stroke:#4caf50
-    style E fill:#ffebee,stroke:#d32f2f"""
+    %% Styling for proper flowchart appearance
+    style A fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
+    style I fill:#e8f5e8,stroke:#4caf50,stroke-width:2px
+    style B fill:#fff3e0,stroke:#ff9800
+    style G fill:#fff3e0,stroke:#ff9800
+    style F fill:#ffebee,stroke:#d32f2f"""
     
     def _create_error_diagram(self, error_message: str) -> str:
         """Create an error diagram when conversion fails"""
@@ -411,75 +423,85 @@ class FlowchartGenerator:
             return self._create_error_diagram(str(e))
     
     def _generate_simple_flowchart(self, summary: str, domain: str) -> str:
-        """Generate a simple 5-step flowchart"""
+        """Generate a simple 5-step flowchart using proper flowchart symbols"""
         clean_domain = self._sanitize_label(domain)
         return f"""flowchart TD
-    A(["Start: {clean_domain} Process"]) --> B["Initialize System"]
-    B --> C["Process Input Data"]
-    C --> D["Execute Automation"]
-    D --> E["Generate Results"]
-    E --> F(["Complete"])
+    A(("Start")) --> B[/"Read Input"/]
+    B --> C["Initialize {clean_domain} System"]
+    C --> D["Process Input Data"]
+    D --> E["Execute Automation"]
+    E --> F[/"Output Results"/]
+    F --> G(("End"))
     
-    style A fill:#e3f2fd,stroke:#1976d2
-    style F fill:#e8f5e8,stroke:#4caf50"""
+    %% Styling for proper flowchart appearance
+    style A fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
+    style G fill:#e8f5e8,stroke:#4caf50,stroke-width:2px
+    style B fill:#fff3e0,stroke:#ff9800
+    style F fill:#fff3e0,stroke:#ff9800"""
     
     def _generate_moderate_flowchart(self, summary: str, domain: str) -> str:
-        """Generate a moderate complexity flowchart with branching and error handling"""
+        """Generate a moderate complexity flowchart using proper flowchart symbols"""
         clean_domain = self._sanitize_label(domain)
         return f"""flowchart TD
-    A(["Start: {clean_domain} Automation"]) --> B["Initialize System"]
-    B --> C["Load Configuration"]
+    A(("Start")) --> B[/"Input: Configuration File"/]
+    B --> C["Initialize {clean_domain} System"]
     C --> D{{"Config Valid?"}}
-    D -->|"No"| E["Handle Config Error"]
+    D -->|"No"| E["Display Config Error"]
     D -->|"Yes"| F["Connect to Service"]
     F --> G{{"Connection Success?"}}
-    G -->|"No"| H["Retry Connection"]
-    G -->|"Yes"| I["Validate Input Data"]
-    H --> J{{"Max Retries?"}}
-    J -->|"No"| F
-    J -->|"Yes"| K["Connection Failed"]
-    I --> L{{"Data Valid?"}}
-    L -->|"No"| M["Data Validation Error"]
-    L -->|"Yes"| N["Process Data"]
-    N --> O["Apply Business Rules"]
-    O --> P{{"Processing Success?"}}
-    P -->|"Yes"| Q["Generate Output"]
-    P -->|"No"| R["Handle Processing Error"]
-    Q --> S["Save Results"]
-    S --> T{{"Save Successful?"}}
-    T -->|"Yes"| U["Send Notifications"]
-    T -->|"No"| V["Retry Save"]
-    V --> W{{"Retry Limit Reached?"}}
-    W -->|"No"| S
-    W -->|"Yes"| X["Save Failed"]
-    U --> Y(["Success: Process Complete"])
-    E --> Z1(["End: Config Error"])
-    K --> Z2(["End: Connection Failed"])
-    M --> Z3(["End: Data Invalid"])
-    R --> Z4(["End: Processing Failed"])
-    X --> Z5(["End: Save Failed"])
+    G -->|"No"| H["Increment Retry Counter"]
+    H --> I{{"Max Retries Reached?"}}
+    I -->|"No"| F
+    I -->|"Yes"| J["Log Connection Error"]
+    G -->|"Yes"| K[/"Input: Data Validation"/]
+    K --> L["Validate Input Data"]
+    L --> M{{"Data Valid?"}}
+    M -->|"No"| N["Display Validation Error"]
+    M -->|"Yes"| O["Process Data"]
+    O --> P["Apply Business Rules"]
+    P --> Q{{"Processing Success?"}}
+    Q -->|"Yes"| R[/"Output: Generate Results"/]
+    Q -->|"No"| S["Handle Processing Error"]
+    R --> T["Save Results to Database"]
+    T --> U{{"Save Successful?"}}
+    U -->|"Yes"| V[/"Output: Success Notification"/]
+    U -->|"No"| W["Increment Save Retry"]
+    W --> X{{"Save Retry Limit?"}}
+    X -->|"No"| T
+    X -->|"Yes"| Y["Log Save Error"]
+    V --> Z(("End: Success"))
+    E --> Z1(("End: Config Error"))
+    J --> Z2(("End: Connection Failed"))
+    N --> Z3(("End: Data Invalid"))
+    S --> Z4(("End: Processing Failed"))
+    Y --> Z5(("End: Save Failed"))
     
-    style A fill:#e3f2fd,stroke:#1976d2
-    style Y fill:#e8f5e8,stroke:#4caf50
-    style Z1 fill:#ffebee,stroke:#d32f2f
-    style Z2 fill:#ffebee,stroke:#d32f2f
-    style Z3 fill:#ffebee,stroke:#d32f2f
-    style Z4 fill:#ffebee,stroke:#d32f2f
-    style Z5 fill:#ffebee,stroke:#d32f2f
-    style E fill:#fff3e0,stroke:#ff9800
-    style M fill:#fff3e0,stroke:#ff9800
-    style R fill:#fff3e0,stroke:#ff9800"""
+    %% Styling for proper flowchart appearance
+    style A fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
+    style Z fill:#e8f5e8,stroke:#4caf50,stroke-width:2px
+    style Z1 fill:#ffebee,stroke:#d32f2f,stroke-width:2px
+    style Z2 fill:#ffebee,stroke:#d32f2f,stroke-width:2px
+    style Z3 fill:#ffebee,stroke:#d32f2f,stroke-width:2px
+    style Z4 fill:#ffebee,stroke:#d32f2f,stroke-width:2px
+    style Z5 fill:#ffebee,stroke:#d32f2f,stroke-width:2px
+    style B fill:#fff3e0,stroke:#ff9800
+    style K fill:#fff3e0,stroke:#ff9800
+    style R fill:#fff3e0,stroke:#ff9800
+    style V fill:#fff3e0,stroke:#ff9800
+    style E fill:#ffccbc,stroke:#ff5722
+    style N fill:#ffccbc,stroke:#ff5722
+    style S fill:#ffccbc,stroke:#ff5722"""
     
     def _generate_complex_flowchart(self, summary: str, domain: str) -> str:
-        """Generate a complex flowchart with multiple decision points"""
+        """Generate a complex flowchart with multiple decision points using proper symbols"""
         clean_domain = self._sanitize_label(domain)
         return f"""flowchart TD
-    A(["Start: {clean_domain} Workflow"]) --> B["Initialize Environment"]
+    A(("Start: {clean_domain} Workflow")) --> B["Initialize Environment"]
     B --> C["Load Configuration"]
     C --> D["Validate Prerequisites"]
     D --> E{{"Prerequisites Met?"}}
     E -->|"No"| F["Setup Missing Components"]
-    E -->|"Yes"| G["Load Input Data"]
+    E -->|"Yes"| G[/"Input: Load Data"/]
     F --> G
     G --> H["Data Validation Layer"]
     H --> I{{"Data Quality Check"}}
@@ -493,23 +515,28 @@ class FlowchartGenerator:
     O --> P["Quality Assurance"]
     P --> Q{{"QA Pass?"}}
     Q -->|"No"| R["Issue Resolution"]
-    Q -->|"Yes"| S["Generate Outputs"]
+    Q -->|"Yes"| S[/"Output: Generate Results"/]
     R --> S
     S --> T["Backup Creation"]
     T --> U["Save to Database"]
     U --> V{{"Save Success?"}}
     V -->|"No"| W["Rollback & Retry"]
-    V -->|"Yes"| X["Send Notifications"]
+    V -->|"Yes"| X[/"Output: Send Notifications"/]
     W --> U
-    X --> Y["Generate Reports"]
+    X --> Y[/"Output: Generate Reports"/]
     Y --> Z["Cleanup Temporary Files"]
-    Z --> AA(["Process Complete"])
+    Z --> AA(("Process Complete"))
     N --> BB["Log Error Details"]
-    BB --> CC(["End with Error"])
+    BB --> CC(("End with Error"))
     
-    style A fill:#e3f2fd,stroke:#1976d2
-    style AA fill:#e8f5e8,stroke:#4caf50
-    style CC fill:#ffebee,stroke:#d32f2f
-    style N fill:#fff3e0,stroke:#ff9800
+    %% Styling for proper flowchart appearance
+    style A fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
+    style AA fill:#e8f5e8,stroke:#4caf50,stroke-width:2px
+    style CC fill:#ffebee,stroke:#d32f2f,stroke-width:2px
+    style G fill:#fff3e0,stroke:#ff9800
+    style S fill:#fff3e0,stroke:#ff9800
+    style X fill:#fff3e0,stroke:#ff9800
+    style Y fill:#fff3e0,stroke:#ff9800
+    style N fill:#ffccbc,stroke:#ff5722
     style J fill:#f3e5f5,stroke:#9c27b0
     style R fill:#f3e5f5,stroke:#9c27b0"""
