@@ -21,6 +21,7 @@ try:
     from utils.MongoDBFunctions import MongoDB
     from utils.validators import InputValidator
     from utils.mermaid_renderer import MermaidRenderer
+    from utils.vector_admin import VectorSearchAdmin
     UTILS_AVAILABLE = True
 except ImportError as e:
     st.error(f"❌ **Utils Import Error**: {str(e)}")
@@ -285,7 +286,73 @@ def create_sidebar_search(mongo_db):
     """Create the right sidebar search functionality"""
     
     with st.sidebar:
-        st.markdown("### 🔍 Search Automation Solutions")
+        # Vector Search Admin Interface - MOVED TO TOP
+        st.markdown("### 🔍 Vector Search Status")
+        
+        # Check if vector search is enabled
+        vector_enabled = getattr(mongo_db, 'vector_search_enabled', False)
+        embedding_available = getattr(mongo_db, 'embedding_service', None) is not None
+        
+        # Status indicators
+        col1, col2 = st.columns(2)
+        with col1:
+            if vector_enabled:
+                st.success("🟢 Vector")
+            else:
+                st.error("🔴 Vector")
+        with col2:
+            if embedding_available:
+                st.success("🟢 Embeddings")
+            else:
+                st.error("🔴 Embeddings")
+        
+        # Vector search stats
+        try:
+            vector_stats = mongo_db.get_vector_search_stats()
+            
+            # Mini dashboard
+            st.markdown(f"**📊 Vector Ready:** {vector_stats.get('percentage_ready', 0)}%")
+            ready_docs = vector_stats.get('with_embeddings', 0)
+            total_docs = vector_stats.get('total_documents', 0)
+            
+            if total_docs > 0:
+                progress = ready_docs / total_docs
+                st.progress(progress)
+                st.caption(f"{ready_docs}/{total_docs} documents")
+            
+            # Restricted admin access with password
+            with st.expander("🔧 Advanced Admin (Restricted)"):
+                # Show admin login form
+                admin_password = st.text_input("Enter admin password:", type="password", key="admin_pass")
+                
+                if st.button("🔐 Admin Access", use_container_width=True):
+                    # Read admin password from secrets
+                    admin_secret_password = st.secrets.get("ADMIN_PASSWORD", "vector_admin_2024")
+                    
+                    if admin_password == admin_secret_password:
+                        st.session_state.show_vector_admin = True
+                        st.session_state.admin_authenticated = True
+                        st.success("✅ Admin access granted!")
+                        st.rerun()
+                    elif admin_password:
+                        st.error("❌ Invalid password")
+                    else:
+                        st.warning("⚠️ Please enter a password")
+                
+                # Show current status
+                if st.session_state.get('admin_authenticated', False):
+                    st.success("🔓 Admin mode active")
+                    if st.button("🚪 Logout Admin", use_container_width=True):
+                        st.session_state.show_vector_admin = False
+                        st.session_state.admin_authenticated = False
+                        st.rerun()
+                
+        except Exception as e:
+            st.warning("Vector stats unavailable")
+        
+        # Regular Search - MOVED BELOW VECTOR SEARCH
+        st.markdown("---")
+        st.markdown("### 🔎 Search Automation Solutions")
         
         # Search input
         search_query = st.text_input(
@@ -352,6 +419,7 @@ def create_sidebar_search(mongo_db):
             except:
                 st.info("Stats unavailable")
         
+        
         # Navigation to create automation
         st.markdown("---")
         st.markdown("### 📝 Create New Automation")
@@ -360,7 +428,81 @@ def create_sidebar_search(mongo_db):
             st.session_state.search_results = []
             st.session_state.show_search_results = False
             st.session_state.create_mode = True
+            st.session_state.show_vector_admin = False
             st.rerun()
+
+def show_vector_stats_homepage(mongo_db):
+    """Show vector search statistics on the home page"""
+    try:
+        # Get vector search stats
+        vector_stats = mongo_db.get_vector_search_stats()
+        vector_enabled = getattr(mongo_db, 'vector_search_enabled', False)
+        embedding_available = getattr(mongo_db, 'embedding_service', None) is not None
+        
+        # Create a nice info box with vector search status
+        if vector_enabled and embedding_available:
+            st.markdown(f"""
+            <div class="success-box" style="background: linear-gradient(90deg, #e8f5e8, #f0f8f0); padding: 20px; border-radius: 10px; border-left: 5px solid #4caf50; margin-bottom: 20px;">
+                <h3 style="margin: 0 0 10px 0; color: #2e7d32;">🔍 Semantic Search Enabled</h3>
+                <p style="margin: 0; color: #1b5e20;">
+                    <strong>Vector Search:</strong> Active with {vector_stats.get('percentage_ready', 0)}% documents ready for semantic search
+                    <br><strong>Search Intelligence:</strong> Finding solutions by meaning, not just keywords
+                    <br><strong>Ready Documents:</strong> {vector_stats.get('with_embeddings', 0)}/{vector_stats.get('total_documents', 0)} automation solutions
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.markdown(f"""
+            <div class="warning-box" style="background: linear-gradient(90deg, #fff3e0, #fff8f0); padding: 20px; border-radius: 10px; border-left: 5px solid #ff9800; margin-bottom: 20px;">
+                <h3 style="margin: 0 0 10px 0; color: #f57500;">🔍 Standard Search Active</h3>
+                <p style="margin: 0; color: #e65100;">
+                    <strong>Search Mode:</strong> Keyword-based search (Vector search not available)
+                    <br><strong>Documents:</strong> {vector_stats.get('total_documents', 0)} automation solutions available
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
+            
+        # Quick stats row
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            st.metric(
+                "🤖 Total Solutions", 
+                vector_stats.get('total_documents', 0),
+                help="Total automation solutions in database"
+            )
+        
+        with col2:
+            st.metric(
+                "🔍 Vector Ready", 
+                f"{vector_stats.get('percentage_ready', 0)}%",
+                help="Percentage of documents with semantic search capability"
+            )
+        
+        with col3:
+            search_type = "Semantic" if vector_enabled else "Keyword"
+            st.metric(
+                "⚡ Search Type", 
+                search_type,
+                help="Current search method being used"
+            )
+        
+        with col4:
+            db_stats = mongo_db.get_database_stats()
+            st.metric(
+                "📊 Active Domains", 
+                db_stats.get('total_domains', 0),
+                help="Number of different automation domains"
+            )
+            
+    except Exception as e:
+        # Fallback if vector stats fail
+        st.markdown(f"""
+        <div class="info-box" style="background: #f5f5f5; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+            <h3 style="margin: 0 0 10px 0;">🤖 Automation Generator</h3>
+            <p style="margin: 0;">Transform your Standard Operating Procedures into automated workflows with AI assistance</p>
+        </div>
+        """, unsafe_allow_html=True)
 
 def display_search_results():
     """Display search results in the main area"""
@@ -1046,11 +1188,35 @@ def main():
     create_sidebar_search(mongo_db)
     
     # Main content area
-    if st.session_state.show_search_results and not st.session_state.create_mode:
+    if st.session_state.get('show_vector_admin', False) and st.session_state.get('admin_authenticated', False):
+        # Show restricted vector search admin interface
+        try:
+            vector_admin = VectorSearchAdmin()
+            st.markdown("## 🔧 Vector Search Administration")
+            st.warning("⚠️ **Restricted Access** - Admin functions enabled")
+            
+            vector_admin.render_vector_search_dashboard()
+            
+            # Testing interfaces
+            st.markdown("---")
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                vector_admin.render_search_test_interface()
+            
+            with col2:
+                vector_admin.render_embedding_test_interface()
+                
+        except Exception as e:
+            st.error(f"❌ Vector admin interface error: {e}")
+            st.info("Please check your configuration and try again.")
+            
+    elif st.session_state.show_search_results and not st.session_state.create_mode:
         # Show search results
         display_search_results()
     else:
-        # Show create automation interface
+        # Show create automation interface with vector stats on home page
+        show_vector_stats_homepage(mongo_db)
         show_create_automation_interface(gemini, mongo_db)
     
     # Footer with additional information

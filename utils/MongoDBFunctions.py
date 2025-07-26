@@ -5,6 +5,7 @@ from pymongo import MongoClient
 from pymongo.errors import ConnectionFailure, OperationFailure, ServerSelectionTimeoutError
 import logging
 from typing import Optional, List, Dict, Any
+from .embedding_service import GeminiEmbeddingService
 
 class MongoDB:
     def __init__(self):
@@ -13,6 +14,9 @@ class MongoDB:
         
         # Initialize database connection with error handling
         self._initialize_connection()
+        
+        # Initialize embedding service
+        self._initialize_embedding_service()
     
     def _initialize_connection(self):
         """Initialize MongoDB connection with proper error handling"""
@@ -58,6 +62,18 @@ class MongoDB:
             st.error(f"Error initializing MongoDB: {str(e)}")
             st.info("**General troubleshooting:**\n• Check your database configuration\n• Verify secrets.toml file\n• Contact support if issue persists")
             st.stop()
+    
+    def _initialize_embedding_service(self):
+        """Initialize Gemini embedding service for vector search"""
+        try:
+            self.embedding_service = GeminiEmbeddingService()
+            self.vector_search_enabled = True
+            self.logger.info("Vector search enabled with Gemini embeddings")
+            
+        except Exception as e:
+            self.logger.warning(f"Vector search disabled - embedding service failed: {e}")
+            self.embedding_service = None
+            self.vector_search_enabled = False
     
     def _handle_db_error(self, error: Exception, operation: str) -> None:
         """Handle database errors gracefully with specific guidance"""
@@ -109,7 +125,7 @@ class MongoDB:
             """)
 
     def search_mongodb(self, query: str, limit: int = 10) -> Optional[List[Dict[str, Any]]]:
-        """Enhanced search with fallback mechanisms"""
+        """Enhanced search with vector search, Atlas search, and regex fallbacks"""
         if not query or len(query.strip()) < 2:
             st.warning("⚠️ Search query must be at least 2 characters long")
             return []
@@ -118,14 +134,30 @@ class MongoDB:
             # Sanitize query to prevent injection
             sanitized_query = query.strip()[:100]  # Limit query length
             
-            # First try Atlas Search if available
+            # First try vector search if embedding service is available
+            if self.vector_search_enabled and self.embedding_service:
+                results = self.vector_search_mongodb(sanitized_query, limit)
+                if results:
+                    self.logger.info(f"Vector search successful for query: {sanitized_query}")
+                    return results
+                else:
+                    self.logger.info("Vector search returned no results, trying hybrid approach")
+            
+            # Try hybrid search (vector + text) if vector search is available
+            if self.vector_search_enabled and self.embedding_service:
+                results = self.hybrid_search_mongodb(sanitized_query, limit)
+                if results:
+                    self.logger.info(f"Hybrid search successful for query: {sanitized_query}")
+                    return results
+            
+            # Fallback to Atlas text search
             results = self._atlas_search(sanitized_query, limit)
             if results:
                 self.logger.info(f"Atlas search successful for query: {sanitized_query}")
                 return results
             
-            # Fallback to regex search
-            self.logger.info("Atlas search failed or unavailable, using regex search")
+            # Final fallback to regex search
+            self.logger.info("All advanced search methods failed, using regex search")
             results = self._regex_search(sanitized_query, limit)
             return results
             
@@ -133,6 +165,147 @@ class MongoDB:
             self.logger.error(f"Search operation failed: {str(e)}")
             self._handle_db_error(e, "search operation")
             return []
+    
+    def vector_search_mongodb(self, query: str, limit: int = 10) -> List[Dict[str, Any]]:
+        """Perform semantic vector search using Gemini embeddings"""
+        
+        if not self.vector_search_enabled or not self.embedding_service:
+            self.logger.warning("Vector search not available")
+            return []
+        
+        if not query or len(query.strip()) < 2:
+            return []
+        
+        try:
+            # Generate query embedding
+            query_embedding = self.embedding_service.generate_query_embedding(query)
+            
+            if not query_embedding:
+                self.logger.warning("Could not generate query embedding")
+                return []
+            
+            # Vector search pipeline
+            vector_pipeline = [
+                {
+                    "$vectorSearch": {
+                        "index": "vector_search_index",
+                        "path": "embedding",
+                        "queryVector": query_embedding,
+                        "numCandidates": limit * 10,  # Search more candidates for better results
+                        "limit": limit,
+                        "filter": {
+                            "status": {"$eq": "active"},
+                            "search_metadata.has_embedding": {"$eq": True}
+                        }
+                    }
+                },
+                {
+                    "$addFields": {
+                        "vector_score": {"$meta": "vectorSearchScore"}
+                    }
+                },
+                {
+                    "$project": {
+                        "domain": 1,
+                        "summary": 1,
+                        "script": 1,
+                        "unit_tests": 1,
+                        "prerequisites": 1,
+                        "block_diagram": 1,
+                        "extra_info": 1,
+                        "timestamp": 1,
+                        "vector_score": 1,
+                        "search_metadata": 1
+                    }
+                }
+            ]
+            
+            results = list(self.collection.aggregate(vector_pipeline))
+            
+            # Enhance results with metadata
+            for result in results:
+                result['search_type'] = 'vector'
+                result['ratings'] = self._get_solution_ratings(str(result.get('_id', '')))
+            
+            self.logger.info(f"Vector search returned {len(results)} results for: {query}")
+            return results
+            
+        except Exception as e:
+            self.logger.error(f"Vector search failed: {e}")
+            return []
+    
+    def hybrid_search_mongodb(self, query: str, limit: int = 10) -> List[Dict[str, Any]]:
+        """Combine vector and text search for optimal results"""
+        
+        try:
+            # Get vector search results (half of limit)
+            vector_limit = max(1, limit // 2)
+            vector_results = self.vector_search_mongodb(query, vector_limit)
+            
+            # Get text search results (remaining half)
+            text_limit = limit - len(vector_results)
+            text_results = self._atlas_search(query, text_limit) if text_limit > 0 else []
+            
+            # Combine and deduplicate results
+            combined_results = self._merge_search_results(vector_results, text_results, query)
+            
+            return combined_results[:limit]
+            
+        except Exception as e:
+            self.logger.error(f"Hybrid search failed: {e}")
+            # Fallback to vector search only
+            return self.vector_search_mongodb(query, limit)
+    
+    def _merge_search_results(self, vector_results: List, text_results: List, 
+                             query: str) -> List[Dict[str, Any]]:
+        """Intelligently merge vector and text search results"""
+        
+        seen_ids = set()
+        merged_results = []
+        
+        # Process vector results first (they're usually more relevant)
+        for result in vector_results:
+            result_id = str(result.get('_id', ''))
+            if result_id not in seen_ids:
+                # Normalize vector score to 0-10 scale
+                vector_score = result.get('vector_score', 0)
+                result['combined_score'] = min(vector_score * 10, 10.0)  # Scale and cap at 10
+                result['search_sources'] = ['vector']
+                merged_results.append(result)
+                seen_ids.add(result_id)
+        
+        # Process text results
+        for result in text_results:
+            result_id = str(result.get('_id', ''))
+            if result_id not in seen_ids:
+                # Text search scores are already reasonable
+                text_score = result.get('score', 0)
+                result['combined_score'] = text_score * 0.8  # Slightly lower weight
+                result['search_sources'] = ['text']
+                merged_results.append(result)
+                seen_ids.add(result_id)
+            else:
+                # Boost score for items found in both searches
+                for merged in merged_results:
+                    if str(merged.get('_id', '')) == result_id:
+                        text_boost = result.get('score', 0) * 0.3
+                        merged['combined_score'] += text_boost
+                        merged['search_sources'].append('text')
+                        break
+        
+        # Sort by combined score (highest first)
+        merged_results.sort(key=lambda x: x.get('combined_score', 0), reverse=True)
+        
+        # Add search type metadata
+        for result in merged_results:
+            if len(result.get('search_sources', [])) > 1:
+                result['search_type'] = 'hybrid'
+            elif 'vector' in result.get('search_sources', []):
+                result['search_type'] = 'vector'
+            else:
+                result['search_type'] = 'text'
+        
+        return merged_results
     
     def _atlas_search(self, query: str, limit: int) -> List[Dict[str, Any]]:
         """Atlas Search implementation with comprehensive text search"""
@@ -344,7 +517,7 @@ class MongoDB:
     
     def add_solution_to_mongodb(self, summary: str, script: str, block_diagram: str, 
                                prerequisites: str, domain: str, extra_info: str = "") -> bool:
-        """Enhanced solution addition with validation and error handling"""
+        """Enhanced solution addition with validation, error handling, and vector embeddings"""
         
         # Validate required fields
         if not all([summary.strip(), script.strip(), domain.strip()]):
@@ -362,7 +535,47 @@ class MongoDB:
             return False
         
         try:
-            # Prepare solution document
+            # Generate embedding if service is available
+            embedding = []
+            embedding_metadata = {
+                "has_embedding": False,
+                "embedding_model": None,
+                "embedding_timestamp": None,
+                "embedding_error": None
+            }
+            
+            if self.vector_search_enabled and self.embedding_service:
+                try:
+                    # Create combined text for embedding
+                    solution_data = {
+                        'domain': domain,
+                        'summary': summary,
+                        'prerequisites': prerequisites,
+                        'extra_info': extra_info,
+                        'script': script
+                    }
+                    
+                    combined_text = self.embedding_service.create_combined_text_for_embedding(solution_data)
+                    embedding = self.embedding_service.generate_embedding(combined_text)
+                    
+                    if embedding:
+                        embedding_metadata.update({
+                            "has_embedding": True,
+                            "embedding_model": "gemini-embedding-001",
+                            "embedding_timestamp": datetime.now(),
+                            "combined_text": combined_text[:500]  # Store preview for debugging
+                        })
+                        st.info("🔍 **Vector search capability added!** This solution will be searchable using semantic search.")
+                    else:
+                        embedding_metadata["embedding_error"] = "Failed to generate embedding"
+                        st.warning("⚠️ Could not generate embedding. Solution will use text search only.")
+                        
+                except Exception as embed_error:
+                    embedding_metadata["embedding_error"] = str(embed_error)
+                    self.logger.warning(f"Embedding generation failed: {embed_error}")
+                    st.warning("⚠️ Embedding generation failed. Solution will use text search only.")
+            
+            # Prepare enhanced solution document
             solution = {
                 "domain": domain.strip(),
                 "summary": summary.strip(),
@@ -371,10 +584,12 @@ class MongoDB:
                 "prerequisites": prerequisites.strip() if prerequisites else "",
                 "unit_tests": "",  # Will be populated if available
                 "extra_info": extra_info.strip() if extra_info else "",
+                "embedding": embedding,  # Vector embedding for semantic search
+                "search_metadata": embedding_metadata,  # Embedding metadata
                 "timestamp": datetime.now(),
                 "usage_count": 0,
                 "created_by": st.session_state.get('user_id', 'anonymous'),
-                "version": "1.0",
+                "version": "2.0" if embedding else "1.0",  # Version indicates vector capability
                 "status": "active"
             }
             
@@ -576,6 +791,228 @@ class MongoDB:
         except Exception as e:
             st.error(f"❌ Failed to create search index: {str(e)}")
             st.info("This is normal if the index already exists or if you're using MongoDB Community Edition")
+    
+    def create_vector_search_index(self):
+        """Create vector search index for Atlas Vector Search"""
+        try:
+            vector_index_definition = {
+                "name": "vector_search_index",
+                "definition": {
+                    "fields": [
+                        {
+                            "type": "vector",
+                            "path": "embedding",
+                            "numDimensions": 768,  # Gemini embedding dimensions
+                            "similarity": "cosine"
+                        },
+                        {
+                            "type": "filter",
+                            "path": "domain"
+                        },
+                        {  
+                            "type": "filter",
+                            "path": "status"
+                        },
+                        {
+                            "type": "filter", 
+                            "path": "search_metadata.has_embedding"
+                        }
+                    ]
+                }
+            }
+            
+            self.collection.create_search_index(vector_index_definition)
+            st.success("✅ Vector search index created successfully!")
+            self.logger.info("Vector search index created")
+            
+        except Exception as e:
+            st.error(f"❌ Failed to create vector search index: {str(e)}")
+            st.info("This is normal if the index already exists or if you're using MongoDB Community Edition")
+            self.logger.error(f"Vector index creation failed: {e}")
+    
+    def migrate_existing_data_to_vectors(self, batch_size: int = 5, max_documents: int = 100):
+        """Migrate existing solutions to include vector embeddings"""
+        
+        if not self.vector_search_enabled or not self.embedding_service:
+            st.error("❌ Vector search not enabled. Cannot perform migration.")
+            return
+        
+        try:
+            # Find documents without embeddings
+            cursor = self.collection.find({
+                "$or": [
+                    {"search_metadata.has_embedding": {"$ne": True}},
+                    {"search_metadata": {"$exists": False}},
+                    {"embedding": {"$exists": False}}
+                ]
+            }).limit(max_documents)
+            
+            # Count total documents to migrate
+            total_docs = self.collection.count_documents({
+                "$or": [
+                    {"search_metadata.has_embedding": {"$ne": True}},
+                    {"search_metadata": {"$exists": False}},
+                    {"embedding": {"$exists": False}}
+                ]
+            })
+            
+            if total_docs == 0:
+                st.success("✅ All documents already have vector embeddings!")
+                return
+            
+            st.info(f"🔄 **Starting migration of {min(total_docs, max_documents)} documents to vector search...**")
+            st.info("This may take a few minutes depending on the number of documents.")
+            
+            # Create progress tracking
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+            processed = 0
+            successful = 0
+            failed = 0
+            
+            documents = list(cursor)
+            
+            # Process in batches to avoid rate limits
+            for i in range(0, len(documents), batch_size):
+                batch = documents[i:i + batch_size]
+                
+                for doc in batch:
+                    try:
+                        status_text.text(f"Processing document {processed + 1}/{len(documents)}: {doc.get('domain', 'Unknown')}")
+                        
+                        # Create combined text for embedding
+                        solution_data = {
+                            'domain': doc.get('domain', ''),
+                            'summary': doc.get('summary', ''),
+                            'prerequisites': doc.get('prerequisites', ''),
+                            'extra_info': doc.get('extra_info', ''),
+                            'script': doc.get('script', '')
+                        }
+                        
+                        combined_text = self.embedding_service.create_combined_text_for_embedding(solution_data)
+                        embedding = self.embedding_service.generate_embedding(combined_text)
+                        
+                        if embedding:
+                            # Update document with embedding
+                            update_result = self.collection.update_one(
+                                {"_id": doc["_id"]},
+                                {
+                                    "$set": {
+                                        "embedding": embedding,
+                                        "search_metadata": {
+                                            "has_embedding": True,
+                                            "embedding_model": "gemini-embedding-001",
+                                            "embedding_timestamp": datetime.now(),
+                                            "combined_text": combined_text[:500],
+                                            "migration_batch": i // batch_size + 1
+                                        },
+                                        "version": "2.0"  # Update version
+                                    }
+                                }
+                            )
+                            
+                            if update_result.modified_count > 0:
+                                successful += 1
+                            else:
+                                failed += 1
+                                self.logger.warning(f"Document {doc.get('_id')} was not updated")
+                        else:
+                            failed += 1
+                            self.logger.error(f"Failed to generate embedding for document {doc.get('_id')}")
+                            
+                            # Still update with metadata indicating failure
+                            self.collection.update_one(
+                                {"_id": doc["_id"]},
+                                {
+                                    "$set": {
+                                        "search_metadata": {
+                                            "has_embedding": False,
+                                            "embedding_model": None,
+                                            "embedding_timestamp": datetime.now(),
+                                            "embedding_error": "Failed to generate embedding during migration"
+                                        }
+                                    }
+                                }
+                            )
+                        
+                        processed += 1
+                        
+                        # Update progress
+                        progress = processed / len(documents)
+                        progress_bar.progress(progress)
+                        
+                    except Exception as e:
+                        failed += 1
+                        processed += 1
+                        self.logger.error(f"Failed to migrate document {doc.get('_id')}: {e}")
+                        continue
+                
+                # Delay between batches to respect API rate limits
+                if i + batch_size < len(documents):
+                    import time
+                    time.sleep(2)  # 2 second delay between batches
+            
+            # Final status
+            status_text.empty()
+            progress_bar.empty()
+            
+            if successful > 0:
+                st.success(f"✅ **Migration completed!**")
+                st.success(f"Successfully migrated: {successful} documents")
+                if failed > 0:
+                    st.warning(f"Failed to migrate: {failed} documents")
+                st.info("🔍 Documents with embeddings can now be found using semantic search!")
+            else:
+                st.error(f"❌ Migration failed. No documents were successfully processed.")
+                st.error("Check the logs for detailed error information.")
+            
+        except Exception as e:
+            st.error(f"❌ Migration failed: {e}")
+            self.logger.error(f"Migration error: {e}")
+    
+    def get_vector_search_stats(self) -> Dict[str, Any]:
+        """Get statistics about vector search readiness"""
+        try:
+            # Count documents with embeddings
+            with_embeddings = self.collection.count_documents({
+                "search_metadata.has_embedding": True
+            })
+            
+            # Count documents without embeddings  
+            without_embeddings = self.collection.count_documents({
+                "$or": [
+                    {"search_metadata.has_embedding": {"$ne": True}},
+                    {"search_metadata": {"$exists": False}}
+                ]
+            })
+            
+            # Total documents
+            total_documents = self.collection.count_documents({})
+            
+            # Calculate percentage
+            percentage_ready = (with_embeddings / total_documents * 100) if total_documents > 0 else 0
+            
+            stats = {
+                "total_documents": total_documents,
+                "with_embeddings": with_embeddings,
+                "without_embeddings": without_embeddings,
+                "percentage_ready": round(percentage_ready, 1),
+                "vector_search_enabled": self.vector_search_enabled,
+                "embedding_service_available": self.embedding_service is not None
+            }
+            
+            return stats
+            
+        except Exception as e:
+            self.logger.error(f"Failed to get vector search stats: {e}")
+            return {
+                "total_documents": 0,
+                "with_embeddings": 0,
+                "without_embeddings": 0,
+                "percentage_ready": 0,
+                "vector_search_enabled": False,
+                "embedding_service_available": False
+            }
     
     def test_connection(self) -> bool:
         """Test MongoDB connection health"""
