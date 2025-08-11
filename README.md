@@ -1,22 +1,131 @@
-# Automation Generator
+# Automation Generator 🤖
+
+> **Transform your Standard Operating Procedures (SOPs) into executable automation scripts using AI**
+
+[![PyPI version](https://badge.fury.io/py/automation-generator.svg)](https://badge.fury.io/py/automation-generator)
+[![Python Support](https://img.shields.io/pypi/pyversions/automation-generator.svg)](https://pypi.org/project/automation-generator/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Downloads](https://pepy.tech/badge/automation-generator)](https://pepy.tech/project/automation-generator)
+
+Automation Generator is a powerful Python package that leverages AI to convert your Standard Operating Procedures (SOPs) into executable automation scripts. Simply provide your SOP documentation, and get production-ready scripts in Bash, PowerShell, Python, or Batch.
 
 ![Automation Generator Homepage](assets/images/HomePage.png)
 
-🤖 **Transform your Standard Operating Procedures into intelligent automation workflows with AI assistance**
+## ✨ Features
 
-This application allows users to upload SOP-based PDF documents and automatically create comprehensive automation solutions. The system features **advanced semantic search** powered by vector embeddings, professional flowcharts with proper symbols, executable scripts, and detailed prerequisites using Google's Gemini AI.
+- **🤖 AI-Powered Generation**: Uses Google's Gemini AI to understand and convert SOPs
+- **📜 Multiple Script Types**: Generate Bash, PowerShell, Python, and Batch scripts  
+- **🔍 Smart Search**: Vector-based semantic search to find existing solutions
+- **📊 Visual Workflows**: Automatic Mermaid flowchart generation
+- **💾 Database Integration**: MongoDB storage with full-text and vector search
+- **🎯 Easy Installation**: Simple `pip install` with minimal configuration
+- **🚀 CLI Interface**: Powerful command-line tools for setup and management
+- **🌐 Web Interface**: Beautiful Streamlit-based web application
+- **📱 Cross-Platform**: Works on Windows, macOS, and Linux
+- **🔧 Production Ready**: Docker support, systemd services, health checks
 
-🌐 **Live Application**: [Automation Generator](https://automation-generator.streamlit.app/)
+## 🚀 Quick Start
 
----
+### Installation
 
-## 🚀 **Version 2.0 - Production Ready!**
+```bash
+pip install automation-generator
+```
 
-✅ **Semantic Vector Search**: Find solutions by meaning, not just keywords  
-✅ **Professional UI**: Beautiful interface with real-time status indicators  
-✅ **Secure Admin**: Password-protected admin interface for advanced features  
-✅ **Smart Fallbacks**: Always working search with multiple fallback mechanisms  
-✅ **Production Ready**: Complete documentation and deployment guides  
+### Initial Setup
+
+```bash
+# Initialize configuration
+automation-generator init
+
+# Set up your API keys (required)
+export GEMINI_API_KEY="your_gemini_api_key"
+export MONGODB_URI="your_mongodb_connection_string"
+
+# Run database migrations
+automation-generator migrate
+
+# Start the application
+automation-generator run
+```
+
+Your automation generator will be available at `http://localhost:8501`
+
+## 📋 Prerequisites
+
+- **Python 3.8+**
+- **Google Gemini API Key** - Get one from [Google AI Studio](https://makersuite.google.com/app/apikey)
+- **MongoDB Database** - Use [MongoDB Atlas](https://www.mongodb.com/atlas) (free tier available) or local MongoDB
+
+## 🛠️ Configuration
+
+### Environment Variables
+
+The simplest way to configure the application:
+
+```bash
+# Required
+export GEMINI_API_KEY="your_gemini_api_key"
+export MONGODB_URI="mongodb+srv://user:pass@cluster.mongodb.net/automation"
+
+# Optional
+export AUTOMATION_GENERATOR_HOST="localhost"
+export AUTOMATION_GENERATOR_PORT="8501"
+export AUTOMATION_GENERATOR_DEBUG="false"
+```
+
+### Configuration File
+
+For advanced configuration, edit `~/.automation-generator/config.yaml`:
+
+```yaml
+version: "1.0"
+
+llm:
+  provider: "gemini"
+  api_key: "${GEMINI_API_KEY}"
+  model: "gemini-1.5-flash"
+
+database:
+  mongodb_uri: "${MONGODB_URI}"
+  database_name: "automation_generator"
+
+app:
+  host: "localhost"
+  port: 8501
+  theme: "light"
+  debug: false
+
+features:
+  enable_community: true
+  enable_ratings: true
+  enable_analytics: true
+  enable_visualizations: true
+```
+
+## 💻 CLI Commands
+
+The package includes a comprehensive CLI for management:
+
+```bash
+# Configuration
+automation-generator config show              # View current config
+automation-generator config set key value     # Set config values
+automation-generator config validate          # Validate configuration
+
+# Database
+automation-generator migrate                  # Run database migrations
+automation-generator migrate --dry-run        # Preview migrations
+
+# Health & Monitoring  
+automation-generator health                   # System health check
+automation-generator health --verbose         # Detailed health info
+
+# Application
+automation-generator run                      # Start the web application
+automation-generator run --host 0.0.0.0      # Bind to all interfaces
+automation-generator run --port 8080         # Use custom port
+```
 
 ---
 

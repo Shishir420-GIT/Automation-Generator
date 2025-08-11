@@ -1,0 +1,53 @@
+# Include important files in the package distribution
+
+# Documentation and license
+include README.md
+include LICENSE.txt
+include CHANGELOG.md
+include pyproject.toml
+
+# Configuration templates
+recursive-include automation_generator/templates *.yaml *.yml *.toml *.service
+include automation_generator/templates/docker-compose.yml
+
+# Static assets  
+recursive-include automation_generator/static *
+
+# Documentation
+recursive-include automation_generator/docs *.md
+
+# Migration scripts
+recursive-include automation_generator/migrations *.py
+
+# Exclude development and build files
+exclude .gitignore
+exclude .pre-commit-config.yaml
+recursive-exclude * __pycache__
+recursive-exclude * *.py[co]
+recursive-exclude * *.orig
+recursive-exclude * *.rej
+recursive-exclude * *.bak
+recursive-exclude * *.swp
+recursive-exclude * *~
+
+# Exclude test files
+recursive-exclude tests *
+exclude tox.ini
+exclude .coverage
+exclude htmlcov
+
+# Exclude development environment
+exclude virtualenv
+recursive-exclude virtualenv *
+exclude .venv
+recursive-exclude .venv *
+
+# Exclude IDE files
+exclude .vscode
+recursive-exclude .vscode *
+exclude .idea
+recursive-exclude .idea *
+
+# Exclude OS files
+exclude .DS_Store
+recursive-exclude * .DS_Store

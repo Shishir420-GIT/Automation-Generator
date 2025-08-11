@@ -1,0 +1,209 @@
+[build-system]
+requires = ["setuptools>=45", "wheel", "setuptools_scm"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "automation-generator"
+description = "AI-powered automation script generator from Standard Operating Procedures (SOPs)"
+readme = "README.md"
+license = {file = "LICENSE.txt"}
+authors = [
+    {name = "Automation Generator Team", email = "support@automation-generator.com"}
+]
+maintainers = [
+    {name = "Automation Generator Team", email = "support@automation-generator.com"}
+]
+keywords = [
+    "automation", 
+    "ai", 
+    "sop", 
+    "scripts", 
+    "devops", 
+    "operations", 
+    "gemini", 
+    "mongodb", 
+    "streamlit"
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "Intended Audience :: Information Technology",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9", 
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Code Generators",
+    "Topic :: System :: Systems Administration",
+    "Topic :: Office/Business :: Office Suites",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Internet :: WWW/HTTP :: Dynamic Content",
+    "Environment :: Web Environment"
+]
+requires-python = ">=3.8"
+dependencies = [
+    "streamlit>=1.28.0",
+    "pymongo>=4.0.0",
+    "google-generativeai>=0.3.0",
+    "PyPDF2>=3.0.0",
+    "click>=8.0.0",
+    "pyyaml>=6.0",
+    "tenacity>=8.0.0",
+]
+dynamic = ["version"]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "pytest-mock>=3.10.0",
+    "black>=22.0.0",
+    "flake8>=5.0.0",
+    "mypy>=0.991",
+    "pre-commit>=2.20.0",
+    "tox>=4.0.0"
+]
+openai = [
+    "openai>=1.0.0"
+]
+claude = [
+    "anthropic>=0.7.0"
+]
+visualization = [
+    "plotly>=5.15.0",
+    "matplotlib>=3.5.0"
+]
+extras = [
+    "streamlit-extras>=0.3.0",
+    "pandas>=1.5.0"
+]
+all = [
+    "automation-generator[openai,claude,visualization,extras]"
+]
+
+[project.urls]
+Homepage = "https://github.com/automation-generator/automation-generator"
+Documentation = "https://automation-generator.readthedocs.io"
+Repository = "https://github.com/automation-generator/automation-generator"
+Issues = "https://github.com/automation-generator/automation-generator/issues"
+Changelog = "https://github.com/automation-generator/automation-generator/blob/main/CHANGELOG.md"
+
+[project.scripts]
+automation-generator = "automation_generator.cli.main:main"
+
+[tool.setuptools]
+packages = ["automation_generator"]
+
+[tool.setuptools.dynamic]
+version = {attr = "automation_generator.__version__"}
+
+[tool.setuptools.package-data]
+automation_generator = [
+    "templates/*.yaml",
+    "templates/*.yml", 
+    "templates/*.toml",
+    "templates/docker-compose.yml",
+    "templates/*.service",
+    "static/**/*",
+    "docs/*.md"
+]
+
+# Development tools configuration
+[tool.black]
+line-length = 88
+target-version = ['py38']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+)/
+'''
+
+[tool.mypy]
+python_version = "3.8"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+
+[[tool.mypy.overrides]]
+module = [
+    "streamlit.*",
+    "pymongo.*", 
+    "google.generativeai.*",
+    "PyPDF2.*",
+    "tenacity.*"
+]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "-v",
+    "--strict-markers",
+    "--disable-warnings",
+    "--cov=automation_generator",
+    "--cov-report=term-missing",
+    "--cov-report=html:htmlcov",
+    "--cov-fail-under=80"
+]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+    "unit: marks tests as unit tests"
+]
+
+[tool.coverage.run]
+source = ["automation_generator"]
+omit = [
+    "*/tests/*",
+    "*/test_*",
+    "automation_generator/cli/main.py"
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if self.debug:",
+    "if __name__ == .__main__.:",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if 0:",
+    "if False:"
+]
+
+[tool.flake8]
+max-line-length = 88
+extend-ignore = ["E203", "W503", "E501"]
+exclude = [
+    ".git",
+    "__pycache__",
+    "build",
+    "dist",
+    ".venv",
+    ".tox"
+]

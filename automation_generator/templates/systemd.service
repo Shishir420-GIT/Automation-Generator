@@ -1,0 +1,51 @@
+[Unit]
+Description=Automation Generator Service
+Documentation=https://automation-generator.readthedocs.io
+After=network.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=exec
+User=automation-generator
+Group=automation-generator
+WorkingDirectory=/opt/automation-generator
+Environment=PATH=/opt/automation-generator/venv/bin
+Environment=VIRTUAL_ENV=/opt/automation-generator/venv
+
+# Environment variables for configuration
+Environment="GEMINI_API_KEY=your_gemini_api_key_here"
+Environment="MONGODB_URI=mongodb://localhost:27017/automation_generator"
+Environment="AUTOMATION_GENERATOR_CONFIG_DIR=/etc/automation-generator"
+Environment="AUTOMATION_GENERATOR_LOG_LEVEL=INFO"
+
+# Main command
+ExecStart=/opt/automation-generator/venv/bin/automation-generator run --host 0.0.0.0 --port 8501
+ExecReload=/bin/kill -HUP $MAINPID
+
+# Process management
+Restart=always
+RestartSec=10s
+TimeoutStartSec=60s
+TimeoutStopSec=30s
+
+# Resource limits
+MemoryMax=1G
+CPUQuota=50%
+
+# Security settings
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/opt/automation-generator /var/log/automation-generator /etc/automation-generator
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=automation-generator
+
+# File descriptor limits
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,101 @@
+version: '3.8'
+
+services:
+  automation-generator:
+    image: automation-generator:latest
+    container_name: automation-generator-app
+    ports:
+      - "8501:8501"
+    environment:
+      # Required environment variables
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - MONGODB_URI=${MONGODB_URI}
+      
+      # Optional environment variables
+      - AUTOMATION_GENERATOR_HOST=0.0.0.0
+      - AUTOMATION_GENERATOR_PORT=8501
+      - AUTOMATION_GENERATOR_DEBUG=false
+      - AUTOMATION_GENERATOR_LOG_LEVEL=INFO
+      
+    volumes:
+      # Mount configuration directory
+      - ./config:/app/config
+      - ./logs:/app/logs
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "automation-generator", "health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    
+    # Restart policy
+    restart: unless-stopped
+    
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '0.5'
+        reservations:
+          memory: 512M
+          cpus: '0.25'
+  
+  # Optional: MongoDB service (if not using cloud MongoDB)
+  mongodb:
+    image: mongo:7.0
+    container_name: automation-generator-mongodb
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=admin
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_ROOT_PASSWORD:-changeme}
+      - MONGO_INITDB_DATABASE=automation_generator
+    volumes:
+      - mongodb_data:/data/db
+      - ./mongo-init:/docker-entrypoint-initdb.d
+    ports:
+      - "27017:27017"
+    restart: unless-stopped
+    
+    # Resource limits for MongoDB
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.0'
+        reservations:
+          memory: 1G
+          cpus: '0.5'
+
+  # Optional: MongoDB Express (for database management)
+  mongo-express:
+    image: mongo-express:latest
+    container_name: automation-generator-mongo-express
+    environment:
+      - ME_CONFIG_MONGODB_ADMINUSERNAME=admin
+      - ME_CONFIG_MONGODB_ADMINPASSWORD=${MONGO_ROOT_PASSWORD:-changeme}
+      - ME_CONFIG_MONGODB_SERVER=mongodb
+      - ME_CONFIG_MONGODB_PORT=27017
+      - ME_CONFIG_BASICAUTH_USERNAME=admin
+      - ME_CONFIG_BASICAUTH_PASSWORD=${MONGO_EXPRESS_PASSWORD:-changeme}
+    ports:
+      - "8081:8081"
+    depends_on:
+      - mongodb
+    restart: unless-stopped
+    profiles:
+      - debug
+
+# Named volumes
+volumes:
+  mongodb_data:
+    driver: local
+
+# Networks
+networks:
+  default:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
