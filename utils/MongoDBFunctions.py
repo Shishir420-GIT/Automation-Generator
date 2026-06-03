@@ -12,6 +12,10 @@ class MongoDB:
         # Setup logging
         self.logger = logging.getLogger(__name__)
         
+        # Connection active flags
+        self.connection_active = False
+        self.connection_error = None
+        
         # Initialize database connection with error handling
         self._initialize_connection()
         
@@ -23,17 +27,17 @@ class MongoDB:
         try:
             mongo_uri = st.secrets.get("mongoDB_URI")
             if not mongo_uri:
-                st.error("❌ **Database Configuration Error**")
-                st.error("MongoDB URI not found in secrets. Please configure your database connection.")
-                st.info("**To fix this:**\n1. Add your MongoDB URI to `.streamlit/secrets.toml`\n2. Restart the application")
-                st.stop()
+                self.connection_active = False
+                self.connection_error = "MongoDB URI not found in secrets"
+                self.logger.warning("MongoDB URI not found in secrets. Running in fallback mode.")
+                return
             
             # Initialize client with timeout settings
             self.client = MongoClient(
                 mongo_uri,
-                serverSelectionTimeoutMS=5000,  # 5 second timeout
-                connectTimeoutMS=5000,
-                socketTimeoutMS=5000
+                serverSelectionTimeoutMS=2000,  # 2 second timeout for faster fallback
+                connectTimeoutMS=2000,
+                socketTimeoutMS=2000
             )
             
             # Test connection
@@ -43,32 +47,21 @@ class MongoDB:
             self.collection = self.db["solutions"]
             self.ratings_collection = self.db["ratings"]
             
+            self.connection_active = True
             self.logger.info("MongoDB connection initialized successfully")
             
-        except ServerSelectionTimeoutError:
-            st.error("❌ **Database Connection Timeout**")
-            st.error("Unable to connect to MongoDB Atlas. Please check your connection.")
-            st.info("**Troubleshooting Steps:**\n• Check internet connection\n• Verify MongoDB URI\n• Ensure database is running\n• Check firewall settings")
-            st.stop()
-            
-        except ConnectionFailure as e:
-            st.error("❌ **Database Connection Failed**")
-            st.error(f"MongoDB connection error: {str(e)}")
-            st.info("**How to fix:**\n• Verify your MongoDB URI\n• Check database credentials\n• Ensure IP is whitelisted\n• Try again in a few moments")
-            st.stop()
-            
-        except Exception as e:
-            st.error("❌ **Unexpected Database Error**")
-            st.error(f"Error initializing MongoDB: {str(e)}")
-            st.info("**General troubleshooting:**\n• Check your database configuration\n• Verify secrets.toml file\n• Contact support if issue persists")
-            st.stop()
+        except (ServerSelectionTimeoutError, ConnectionFailure, Exception) as e:
+            self.connection_active = False
+            self.connection_error = str(e)
+            self.logger.warning(f"MongoDB connection failed: {e}. Running in local database fallback mode.")
     
     def _initialize_embedding_service(self):
         """Initialize Gemini embedding service for vector search"""
         try:
             self.embedding_service = GeminiEmbeddingService()
-            self.vector_search_enabled = True
-            self.logger.info("Vector search enabled with Gemini embeddings")
+            # If MongoDB connection is not active, vector search cannot run in MongoDB
+            self.vector_search_enabled = self.connection_active
+            self.logger.info(f"Vector search enabled status: {self.vector_search_enabled}")
             
         except Exception as e:
             self.logger.warning(f"Vector search disabled - embedding service failed: {e}")
@@ -130,6 +123,10 @@ class MongoDB:
             st.warning("⚠️ Search query must be at least 2 characters long")
             return []
         
+        if not self.connection_active:
+            self.logger.info("MongoDB connection inactive, using local search fallback")
+            return self._search_local_db(query, limit)
+            
         try:
             # Sanitize query to prevent injection
             sanitized_query = query.strip()[:100]  # Limit query length
@@ -486,6 +483,16 @@ class MongoDB:
     
     def get_popular_domains(self, limit: int = 10) -> List[Dict[str, Any]]:
         """Get most popular domains from the database"""
+        if not self.connection_active:
+            solutions = self._read_local_db()
+            domain_counts = {}
+            for s in solutions:
+                d = s.get('domain', '').strip()
+                if d:
+                    domain_counts[d] = domain_counts.get(d, 0) + 1
+            sorted_domains = sorted(domain_counts.items(), key=lambda x: x[1], reverse=True)
+            return [{"domain": d, "count": c, "latest": "Recent"} for d, c in sorted_domains[:limit]]
+            
         try:
             pipeline = [
                 {
@@ -516,7 +523,8 @@ class MongoDB:
             return []
     
     def add_solution_to_mongodb(self, summary: str, script: str, block_diagram: str, 
-                               prerequisites: str, domain: str, extra_info: str = "") -> bool:
+                               prerequisites: str, domain: str, extra_info: str = "",
+                               unit_tests: str = "") -> bool:
         """Enhanced solution addition with validation, error handling, and vector embeddings"""
         
         # Validate required fields
@@ -533,6 +541,10 @@ class MongoDB:
         if len(script.strip()) < 50:
             st.error("❌ Script is too short (minimum 50 characters)")
             return False
+            
+        if not self.connection_active:
+            self.logger.info("MongoDB connection inactive, adding solution locally")
+            return self._add_solution_locally(summary, script, block_diagram, prerequisites, domain, extra_info, unit_tests)
         
         try:
             # Generate embedding if service is available
@@ -582,7 +594,7 @@ class MongoDB:
                 "script": script.strip(),
                 "block_diagram": block_diagram.strip() if block_diagram else "",
                 "prerequisites": prerequisites.strip() if prerequisites else "",
-                "unit_tests": "",  # Will be populated if available
+                "unit_tests": unit_tests.strip() if unit_tests else "",
                 "extra_info": extra_info.strip() if extra_info else "",
                 "embedding": embedding,  # Vector embedding for semantic search
                 "search_metadata": embedding_metadata,  # Embedding metadata
@@ -624,6 +636,21 @@ class MongoDB:
     
     def get_recent_solutions(self, limit: int = 5) -> List[Dict[str, Any]]:
         """Get most recent solutions"""
+        if not self.connection_active:
+            solutions = self._read_local_db()
+            def get_ts(sol):
+                ts = sol.get('timestamp')
+                if isinstance(ts, str):
+                    try:
+                        return datetime.fromisoformat(ts)
+                    except:
+                        pass
+                return datetime.min
+            solutions.sort(key=get_ts, reverse=True)
+            for s in solutions:
+                s['ratings'] = {"average": 0, "count": 0}
+            return solutions[:limit]
+            
         try:
             results = list(
                 self.collection.find({"status": "active"})
@@ -643,6 +670,9 @@ class MongoDB:
     
     def get_database_stats(self) -> Dict[str, Any]:
         """Get database statistics for dashboard"""
+        if not self.connection_active:
+            return self._get_local_stats()
+            
         try:
             # Get basic counts
             total_solutions = self.collection.count_documents({})
@@ -972,6 +1002,9 @@ class MongoDB:
     
     def get_vector_search_stats(self) -> Dict[str, Any]:
         """Get statistics about vector search readiness"""
+        if not self.connection_active:
+            return self._get_local_vector_stats()
+            
         try:
             # Count documents with embeddings
             with_embeddings = self.collection.count_documents({
@@ -1016,9 +1049,134 @@ class MongoDB:
     
     def test_connection(self) -> bool:
         """Test MongoDB connection health"""
+        if not self.connection_active:
+            return False
         try:
             self.client.admin.command('ping')
             return True
         except Exception as e:
             self.logger.error(f"MongoDB connection test failed: {str(e)}")
+            self.connection_active = False
             return False
+
+    def _get_local_db_path(self) -> str:
+        """Get absolute path to local fallback database JSON file"""
+        import os
+        return os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".streamlit", "local_db.json")
+
+    def _read_local_db(self) -> list:
+        """Read solutions from local JSON database"""
+        import json
+        import os
+        db_path = self._get_local_db_path()
+        if not os.path.exists(db_path):
+            return []
+        try:
+            with open(db_path, 'r') as f:
+                return json.load(f)
+        except Exception as e:
+            self.logger.error(f"Failed to read local DB: {e}")
+            return []
+
+    def _write_local_db(self, data: list) -> bool:
+        """Write solutions to local JSON database"""
+        import json
+        import os
+        db_path = self._get_local_db_path()
+        try:
+            # Create parent folder if not exists
+            os.makedirs(os.path.dirname(db_path), exist_ok=True)
+            with open(db_path, 'w') as f:
+                json.dump(data, f, indent=4, default=str)
+            return True
+        except Exception as e:
+            self.logger.error(f"Failed to write local DB: {e}")
+            return False
+
+    def _search_local_db(self, query: str, limit: int = 10) -> list:
+        solutions = self._read_local_db()
+        results = []
+        query_words = query.lower().split()
+        for sol in solutions:
+            score = 0.0
+            fields = {
+                'domain': (sol.get('domain', '') or '').lower(),
+                'summary': (sol.get('summary', '') or '').lower(),
+                'extra_info': (sol.get('extra_info', '') or '').lower(),
+                'script': (sol.get('script', '') or '').lower(),
+                'prerequisites': (sol.get('prerequisites', '') or '').lower(),
+                'unit_tests': (sol.get('unit_tests', '') or '').lower(),
+            }
+            if query.lower() in fields['domain']:
+                score += 10.0
+            if query.lower() in fields['summary']:
+                score += 5.0
+            if query.lower() in fields['extra_info']:
+                score += 3.0
+            if query.lower() in fields['prerequisites']:
+                score += 2.0
+            if query.lower() in fields['script'] or query.lower() in fields['unit_tests']:
+                score += 1.0
+            for word in query_words:
+                if word in fields['domain']:
+                    score += 2.0
+                for field_name in ('summary', 'extra_info', 'prerequisites', 'script', 'unit_tests'):
+                    if word in fields[field_name]:
+                        score += 1.0
+            
+            if score > 0:
+                result = dict(sol)
+                result['score'] = score
+                result['search_type'] = 'local_fallback'
+                result['ratings'] = {"average": 0, "count": 0}
+                results.append(result)
+        
+        results.sort(key=lambda x: x['score'], reverse=True)
+        return results[:limit]
+
+    def _add_solution_locally(self, summary: str, script: str, block_diagram: str, prerequisites: str, domain: str, extra_info: str = "", unit_tests: str = "") -> bool:
+        import uuid
+        solutions = self._read_local_db()
+        solution = {
+            "_id": str(uuid.uuid4()),
+            "domain": domain.strip(),
+            "summary": summary.strip(),
+            "script": script.strip(),
+            "block_diagram": block_diagram.strip() if block_diagram else "",
+            "prerequisites": prerequisites.strip() if prerequisites else "",
+            "unit_tests": unit_tests.strip() if unit_tests else "",
+            "extra_info": extra_info.strip() if extra_info else "",
+            "timestamp": datetime.now(),
+            "usage_count": 0,
+            "created_by": "anonymous",
+            "version": "1.0",
+            "status": "active",
+            "search_metadata": {"has_embedding": False}
+        }
+        solutions.append(solution)
+        if self._write_local_db(solutions):
+            st.success("✅ **Solution saved to local JSON database fallback successfully!**")
+            return True
+        return False
+
+    def _get_local_stats(self) -> dict:
+        solutions = self._read_local_db()
+        domains = set(s.get('domain', '').strip() for s in solutions if s.get('domain'))
+        return {
+            "total_solutions": len(solutions),
+            "active_solutions": len(solutions),
+            "total_domains": len(domains),
+            "total_ratings": 0,
+            "recent_activity": len(solutions)
+        }
+
+    def _get_local_vector_stats(self) -> dict:
+        solutions = self._read_local_db()
+        return {
+            "total_documents": len(solutions),
+            "with_embeddings": 0,
+            "without_embeddings": len(solutions),
+            "percentage_ready": 0.0,
+            "vector_search_enabled": False,
+            "embedding_service_available": False
+        }

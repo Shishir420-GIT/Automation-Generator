@@ -14,6 +14,8 @@ class GenerativeFunction:
         # Setup logging
         logging.basicConfig(level=logging.INFO)
         self.logger = logging.getLogger(__name__)
+        self.api_available = False
+        self.api_error = None
         
         # Initialize API configuration
         self._initialize_api()
@@ -43,18 +45,20 @@ class GenerativeFunction:
         try:
             api_key = st.secrets.get("API_KEY")
             if not api_key:
-                st.error("❌ **API Configuration Error**")
-                st.error("Gemini API key not found in secrets. Please configure your API key.")
-                st.info("**To fix this:**\n1. Add your API key to `.streamlit/secrets.toml`\n2. Restart the application")
-                st.stop()
+                self.api_available = False
+                self.api_error = "Gemini API key not found in secrets"
+                self.logger.warning("Gemini API key not found. Generation will be disabled.")
+                return
             
             genai.configure(api_key=api_key)
+            self.api_available = True
+            self.api_error = None
             self.logger.info("Gemini API initialized successfully")
             
         except Exception as e:
-            st.error(f"❌ **API Initialization Failed**\n{str(e)}")
-            st.info("**Troubleshooting Steps:**\n1. Check your API key\n2. Verify internet connection\n3. Ensure proper secrets configuration")
-            st.stop()
+            self.api_available = False
+            self.api_error = str(e)
+            self.logger.warning(f"Gemini API initialization failed: {e}")
     
     def _validate_inputs(self, text: str, domain: str, operation: str = "generation") -> bool:
         """Validate inputs before processing"""
@@ -200,6 +204,13 @@ class GenerativeFunction:
     def gemini_generate_content(self, prompt: str, model_name: str = "gemini-1.5-flash", operation: str = "content generation") -> Optional[str]:
         """Enhanced content generation with comprehensive error handling"""
         try:
+            if not self.api_available:
+                st.error("❌ **Gemini API unavailable**")
+                st.info("Add `API_KEY` to `.streamlit/secrets.toml` to enable generation.")
+                if self.api_error:
+                    st.caption(f"Current issue: {self.api_error}")
+                return None
+
             # Validate prompt
             if not prompt or len(prompt.strip()) < 10:
                 st.error("❌ Prompt is too short or empty")

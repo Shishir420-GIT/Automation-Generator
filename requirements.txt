@@ -1,9 +1,10 @@
 # Core dependencies - Python 3.13 compatible
-PyPDF2==3.0.1
-streamlit>=1.28.0
+PyPDF2
+streamlit
 google-generativeai
 pymongo
 tenacity
+google-antigravity
 
 # Optional dependencies (install manually if needed)
 # pandas>=2.0.0  # Only if you need data analysis features

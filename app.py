@@ -1,6 +1,14 @@
 import streamlit as st
 import time
 
+# Page configuration - MUST be first Streamlit command
+st.set_page_config(
+    page_title="Automation Generator",
+    page_icon="🤖",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
 # PDF processing with error handling
 try:
     import PyPDF2
@@ -22,19 +30,12 @@ try:
     from utils.validators import InputValidator
     from utils.mermaid_renderer import MermaidRenderer
     from utils.vector_admin import VectorSearchAdmin
+    from utils.agent_service import AutomationAgentService, AutomationRequest, AutomationResult
     UTILS_AVAILABLE = True
 except ImportError as e:
     st.error(f"❌ **Utils Import Error**: {str(e)}")
     st.info("Please ensure all utility modules are in the utils/ folder")
     UTILS_AVAILABLE = False
-
-# Page configuration - MUST be first Streamlit command
-st.set_page_config(
-    page_title="Automation Generator",
-    page_icon="🤖",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
 
 # Initialize session state for theme and search
 if 'theme' not in st.session_state:
@@ -201,10 +202,11 @@ def init_components():
         gemini = GenerativeFunction()
         mongo_db = MongoDB()
         mermaid_renderer = MermaidRenderer()
-        return gemini, mongo_db, mermaid_renderer
+        agent_service = AutomationAgentService(gemini)
+        return gemini, mongo_db, mermaid_renderer, agent_service
     except Exception as e:
         st.error(f"❌ Failed to initialize components: {str(e)}")
-        st.stop()
+        return None, None, None, None
 
 def extract_text_from_pdf(pdf_file):
     """Enhanced PDF extraction with progress bar"""
@@ -677,7 +679,7 @@ def display_search_results():
             st.session_state.create_mode = True
             st.rerun()
 
-def show_create_automation_interface(gemini, mongo_db):
+def show_create_automation_interface(gemini, mongo_db, agent_service):
     """Display the create automation interface"""
     
     st.header("📝 Create New Automation")
@@ -785,7 +787,7 @@ def show_create_automation_interface(gemini, mongo_db):
         
         # Comprehensive validation
         if not comprehensive_validation(domain, uploaded_file, pdf_text):
-            st.stop()
+            return
         
         if pdf_text:
             # Show extraction success
@@ -796,150 +798,101 @@ def show_create_automation_interface(gemini, mongo_db):
             </div>
             """, unsafe_allow_html=True)
             
-            # Generate summary
-            with st.spinner("🧠 Analyzing document and generating summary..."):
-                summary = gemini.gemini_summarize(pdf_text, domain, extra_info)
-            
-            if summary:
-                # Display summary
-                st.subheader("📋 Document Analysis Summary")
-                st.markdown(summary)
-                
-                # Action buttons
-                col1, col2, col3 = st.columns([2, 1, 1])
-                
-                with col1:
-                    generate_button = st.button(
-                        "🚀 Generate Complete Automation",
-                        type="primary",
-                        use_container_width=True,
-                        help="Generate script, tests, flow diagram, and prerequisites"
-                    )
-                
-                with col2:
-                    regenerate_summary = st.button(
-                        "🔄 Regenerate Summary",
-                        use_container_width=True,
-                        help="Generate a new summary with the same content"
-                    )
-                
-                with col3:
-                    if st.button(
-                        "⚙️ Advanced Options",
-                        use_container_width=True,
-                        help="Show advanced generation options including Mermaid diagrams"
-                    ):
-                        st.session_state.show_advanced = not st.session_state.get('show_advanced', False)
-                
-                # Advanced options
-                if st.session_state.get('show_advanced', False):
-                    with st.expander("⚙️ Advanced Generation Options", expanded=True):
-                        col1, col2 = st.columns(2)
-                        
-                        with col1:
-                            complexity_level = st.selectbox(
-                                "Complexity Level",
-                                ["Simple", "Moderate", "Complex", "Expert"],
-                                index=1,
-                                help="Choose the complexity level for generated automation",
-                                key="complexity_level"
-                            )
-                            
-                            include_tests = st.checkbox(
-                                "Generate Unit Tests",
-                                value=True,
-                                help="Include comprehensive unit tests"
-                            )
-                        
-                        with col2:
-                            script_language = st.selectbox(
-                                "Preferred Language",
-                                ["Auto-detect", "Python", "PowerShell", "Bash", "JavaScript"],
-                                help="Choose programming language (Auto-detect recommended)"
-                            )
-                            
-                            include_comments = st.checkbox(
-                                "Detailed Comments",
-                                value=True,
-                                help="Include detailed code comments and documentation"
-                            )
-                
-                # Regenerate summary
-                if regenerate_summary:
-                    st.rerun()
-                
-                # Generate automation
-                if generate_button:
-                    st.markdown("---")
-                    st.subheader("🎯 Generating Your Automation")
-                    
-                    # Progress tracking
-                    progress_container = st.container()
-                    
-                    with progress_container:
-                        progress_bar = st.progress(0)
-                        status_text = st.empty()
-                        
-                        try:
-                            # Step 1: Generate diagrams (both text and Mermaid)
-                            status_text.text("🎨 Creating interactive Mermaid flowchart...")
-                            progress_bar.progress(0.20)
-                            time.sleep(0.5)
-                            
-                            # Get complexity level from advanced options if available
-                            complexity_level = st.session_state.get('complexity_level', 'moderate')
-                            mermaid_diagram = gemini.gemini_generate_mermaid_diagram(summary, domain, extra_info, complexity_level)
-                            
-                            # Create text representation of the Mermaid diagram for reference
-                            block_diagram = f"Process Flow Description:\n\nThis automation generates an interactive Mermaid flowchart with the following features:\n- Complex branching logic with decision points\n- Error handling and retry mechanisms\n- Multiple end states for different scenarios\n- Visual representation of the {domain} automation workflow\n\nThe interactive diagram shows the complete process flow with proper error handling and decision paths."
-                            
-                            # Step 2: Script Generation  
-                            status_text.text("💻 Generating automation script...")
-                            progress_bar.progress(0.4)
-                            time.sleep(0.5)
-                            
-                            script = gemini.gemini_generate_script(summary, domain, extra_info)
-                            
-                            # Step 3: Unit Tests
-                            status_text.text("🧪 Creating unit tests...")
-                            progress_bar.progress(0.7)
-                            time.sleep(0.5)
-                            
-                            unit_tests = gemini.gemini_generate_unit_tests(summary, script, domain, extra_info)
-                            
-                            # Step 4: Prerequisites
-                            status_text.text("📋 Identifying prerequisites...")
-                            progress_bar.progress(0.9)
-                            time.sleep(0.5)
-                            
-                            prerequisites = gemini.gemini_generate_prerequisites(summary, domain, extra_info)
-                            
-                            # Complete
-                            progress_bar.progress(1.0)
-                            status_text.text("✅ Generation complete!")
-                            time.sleep(1)
-                            
-                            # Clear progress indicators
-                            progress_bar.empty()
-                            status_text.empty()
-                            
-                            # Display results in tabs
-                            display_automation_results(block_diagram, mermaid_diagram, script, unit_tests, prerequisites, domain, summary, mongo_db, extra_info)
-                        
-                        except Exception as e:
-                            progress_bar.empty()
-                            status_text.empty()
-                            st.markdown(f"""
-                            <div class="error-box">
-                                <p><strong>❌ Generation Failed</strong><br>{str(e)}</p>
-                            </div>
-                            """, unsafe_allow_html=True)
-            else:
+            if not gemini or not getattr(gemini, "api_available", False):
                 st.markdown(f"""
-                <div class="error-box">
-                    <p><strong>❌ Summary Generation Failed</strong><br>Please try again with a different document or check your API configuration.</p>
+                <div class="warning-box">
+                    <p><strong>⚠️ Generation Disabled</strong><br>
+                    Add a valid Gemini API key to <code>.streamlit/secrets.toml</code> to generate automations.</p>
                 </div>
                 """, unsafe_allow_html=True)
+                return
+
+            # Action buttons
+            col1, col2 = st.columns([2, 1])
+                
+            with col1:
+                generate_button = st.button(
+                    "🚀 Generate Complete Automation",
+                    type="primary",
+                    use_container_width=True,
+                    help="Generate summary, script, tests, flow diagram, and prerequisites"
+                )
+            
+            with col2:
+                if st.button(
+                    "⚙️ Advanced Options",
+                    use_container_width=True,
+                    help="Show advanced generation options including Mermaid diagrams"
+                ):
+                    st.session_state.show_advanced = not st.session_state.get('show_advanced', False)
+                
+            # Advanced options
+            if st.session_state.get('show_advanced', False):
+                with st.expander("⚙️ Advanced Generation Options", expanded=True):
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        st.selectbox(
+                            "Complexity Level",
+                            ["Simple", "Moderate", "Complex", "Expert"],
+                            index=1,
+                            help="Choose the complexity level for generated automation",
+                            key="complexity_level"
+                        )
+                        
+                        st.checkbox(
+                            "Generate Unit Tests",
+                            value=True,
+                            help="Include comprehensive unit tests",
+                            key="include_tests"
+                        )
+                    
+                    with col2:
+                        st.selectbox(
+                            "Preferred Language",
+                            ["Python"],
+                            help="Python is currently supported for executable generation",
+                            key="script_language"
+                        )
+                        
+                        st.checkbox(
+                            "Detailed Comments",
+                            value=True,
+                            help="Include detailed code comments and documentation",
+                            key="include_comments"
+                        )
+            
+            if generate_button:
+                request = AutomationRequest(
+                    pdf_text=pdf_text,
+                    domain=domain,
+                    extra_info=extra_info,
+                    complexity=st.session_state.get('complexity_level', 'Moderate').lower(),
+                    include_tests=st.session_state.get('include_tests', True),
+                    script_language=st.session_state.get('script_language', 'Python'),
+                    include_comments=st.session_state.get('include_comments', True),
+                )
+                result = run_agent_generation(agent_service, request)
+                if result:
+                    st.session_state.generated_automation = result
+                    st.session_state.generated_domain = domain
+                    st.session_state.generated_extra_info = extra_info
+
+            result = st.session_state.get("generated_automation")
+            if result and st.session_state.get("generated_domain") == domain:
+                display_automation_results(
+                    result.block_diagram,
+                    result.mermaid_diagram,
+                    result.script,
+                    result.unit_tests,
+                    result.prerequisites,
+                    domain,
+                    result.summary,
+                    mongo_db,
+                    extra_info,
+                    result.validation_report,
+                    result.generation_mode,
+                )
         else:
             st.markdown(f"""
             <div class="error-box">
@@ -961,11 +914,86 @@ def show_create_automation_interface(gemini, mongo_db):
         </div>
         """, unsafe_allow_html=True)
 
-def display_automation_results(block_diagram, mermaid_diagram, script, unit_tests, prerequisites, domain, summary, mongo_db, extra_info):
+def run_agent_generation(agent_service, request):
+    """Run the agent service and render safe progress events in real time."""
+    if not agent_service:
+        st.error("❌ Agent service is unavailable. Please check application startup errors.")
+        return None
+
+    st.markdown("---")
+    st.subheader("🎯 Generating Your Automation")
+
+    progress_by_step = {
+        "initialize": 0.05,
+        "summary": 0.20,
+        "diagram": 0.40,
+        "script": 0.60,
+        "unit_tests": 0.75,
+        "prerequisites": 0.90,
+        "complete": 1.0,
+    }
+
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+    event_log = st.container()
+    result = None
+
+    try:
+        with event_log:
+            st.markdown("**Agent Console**")
+
+        for item in agent_service.stream(request):
+            if isinstance(item, AutomationResult):
+                result = item
+                continue
+
+            progress_bar.progress(progress_by_step.get(item.step, 0.1))
+            status_text.text(item.message)
+
+            with event_log:
+                if item.type == "error":
+                    st.error(item.message)
+                elif item.type == "retry":
+                    st.warning(item.message)
+                elif item.type == "complete":
+                    st.success(item.message)
+                else:
+                    st.info(f"{item.step.title()}: {item.message}")
+
+        progress_bar.progress(1.0)
+        status_text.text("✅ Generation complete!")
+        time.sleep(0.5)
+        progress_bar.empty()
+        status_text.empty()
+        return result
+
+    except Exception as e:
+        progress_bar.empty()
+        status_text.empty()
+        st.markdown(f"""
+        <div class="error-box">
+            <p><strong>❌ Generation Failed</strong><br>{str(e)}</p>
+        </div>
+        """, unsafe_allow_html=True)
+        return None
+
+
+def display_automation_results(block_diagram, mermaid_diagram, script, unit_tests, prerequisites, domain, summary, mongo_db, extra_info, validation_report=None, generation_mode=None):
     """Display generated automation results with enhanced visual diagrams"""
     
     st.markdown("---")
     st.subheader("🎉 Generated Automation Components")
+
+    if generation_mode or validation_report:
+        with st.expander("✅ Agent Validation Report", expanded=False):
+            if generation_mode:
+                st.caption(f"Generation mode: {generation_mode.replace('_', ' ')}")
+            if validation_report:
+                for issue in validation_report:
+                    if issue.passed:
+                        st.success(f"{issue.component} attempt {issue.attempt}: {issue.message}")
+                    else:
+                        st.warning(f"{issue.component} attempt {issue.attempt}: {issue.message}")
     
     # Tabs for organized display
     tab1, tab2, tab3, tab4, tab5 = st.tabs(["🎨 Interactive Diagram", "📝 Process Description", "💻 Script & Tests", "📋 Prerequisites", "💾 Downloads"])
@@ -1140,7 +1168,7 @@ def display_automation_results(block_diagram, mermaid_diagram, script, unit_test
             try:
                 with st.spinner("Saving to database..."):
                     success = mongo_db.add_solution_to_mongodb(
-                        summary, script, block_diagram, prerequisites, domain, extra_info
+                        summary, script, block_diagram, prerequisites, domain, extra_info, unit_tests
                     )
                     if success:
                         st.balloons()
@@ -1182,7 +1210,20 @@ def main():
     """, unsafe_allow_html=True)
     
     # Initialize components
-    gemini, mongo_db, mermaid_renderer = init_components()
+    gemini, mongo_db, mermaid_renderer, agent_service = init_components()
+
+    if not mongo_db:
+        st.error("❌ Core application services failed to initialize.")
+        st.info("Check installed dependencies and restart the Streamlit app.")
+        return
+
+    if not getattr(mongo_db, "connection_active", False):
+        reason = getattr(mongo_db, "connection_error", None) or "MongoDB unavailable"
+        st.sidebar.warning(f"⚠️ Local storage mode: {reason}")
+
+    if not gemini or not getattr(gemini, "api_available", False):
+        reason = getattr(gemini, "api_error", None) or "Gemini unavailable"
+        st.sidebar.warning(f"⚠️ Generation disabled: {reason}")
     
     # Create sidebar search
     create_sidebar_search(mongo_db)
@@ -1217,7 +1258,7 @@ def main():
     else:
         # Show create automation interface with vector stats on home page
         show_vector_stats_homepage(mongo_db)
-        show_create_automation_interface(gemini, mongo_db)
+        show_create_automation_interface(gemini, mongo_db, agent_service)
     
     # Footer with additional information
     st.markdown("---")

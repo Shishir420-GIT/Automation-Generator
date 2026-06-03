@@ -10,13 +10,16 @@ This application allows users to upload SOP-based PDF documents and automaticall
 
 ---
 
-## 🚀 **Version 2.0 - Production Ready!**
+## 🚀 **Version 2.1 - Agentic Workflow Ready!**
 
+✅ **Agentic Generation Flow**: A new orchestration layer coordinates summary, flowchart, script, tests, and prerequisites generation  
+✅ **Self-Healing Validation**: Mermaid and Python outputs are validated, retried, and safely downgraded to fallbacks when needed  
+✅ **Real-Time Agent Console**: Streamlit now shows safe progress events, validation results, retries, and completion status  
 ✅ **Semantic Vector Search**: Find solutions by meaning, not just keywords  
 ✅ **Professional UI**: Beautiful interface with real-time status indicators  
 ✅ **Secure Admin**: Password-protected admin interface for advanced features  
 ✅ **Smart Fallbacks**: Always working search with multiple fallback mechanisms  
-✅ **Production Ready**: Complete documentation and deployment guides  
+✅ **Credential-Safe Startup**: The app can start in degraded mode when Gemini or MongoDB secrets are missing  
 
 ---
 
@@ -37,21 +40,29 @@ User Query → 🔍 Vector Search → 🔄 Hybrid Search → 📝 Text Search �
 
 ### **Document Processing & AI Generation**
 - **PDF Processing**: Upload and analyze SOP-based PDF documents
+- **Agentic Automation Generation**: A single orchestrator coordinates summary, diagram, script, tests, and prerequisites
 - **AI-Powered PDF Summarization**: Intelligent content extraction and summarization
+- **Real-Time Agent Console**: Displays safe operational events for generation steps, validation results, retries, and completion
+- **Self-Healing Output Validation**:
+  - Mermaid diagrams are checked, corrected, and replaced with template fallbacks when needed
+  - Python scripts are checked with syntax and safety validation before display
+  - Unit tests are cleaned and parsed before being included in the final package
 - **Professional Flowchart Generation**: Creates Mermaid diagrams with proper flowchart symbols:
   - Ovals for Start/End points
   - Diamonds for Decision points
   - Rectangles for Process steps
   - Parallelograms for Input/Output operations
 - **Script Generation**: AI-powered automation script creation
+- **Unit Test Generation**: Produces Python tests alongside generated scripts
 - **Prerequisites Analysis**: Comprehensive requirement identification
 
 ### **Enhanced User Experience**
-- **Interactive Workflow**: Review, regenerate, and refine automation outputs
+- **Interactive Workflow**: Generate, validate, review, download, and save complete automation packages
 - **Multiple Complexity Levels**: Simple, moderate, and complex flowchart generation
 - **Theme Support**: Light and dark mode compatibility
 - **Real-time Search Stats**: Vector search readiness and performance metrics
 - **Visual Status Indicators**: 🟢/🔴 status for all system components
+- **Degraded Mode Warnings**: Sidebar warnings make local storage mode and disabled generation explicit
 
 ### **Security & Administration**
 - **Password-Protected Admin**: Secure access to migration and admin tools
@@ -66,8 +77,9 @@ User Query → 🔍 Vector Search → 🔄 Hybrid Search → 📝 Text Search �
 - **Streamlit** (Web interface and UI components)
 - **PyPDF2** (PDF document processing)
 - **google.generativeai** (Gemini AI integration for embeddings and generation)
+- **google-antigravity** (Planned SDK dependency; current implementation uses a compatible local orchestration boundary when SDK imports are unavailable)
 - **pymongo** (MongoDB Atlas integration for vector search)
-- **numpy** (Vector operations and similarity calculations)
+- **tenacity** (Retry handling for Gemini generation calls)
 
 ### **Additional Libraries**
 - base64 (File encoding)
@@ -91,27 +103,22 @@ cd Automation-Generator
 
 ### **2. Install Dependencies**
 ```bash
-# Core packages
-pip install streamlit PyPDF2 google.generativeai pymongo numpy
-
-# Or install from requirements (if available)
 pip install -r requirements.txt
 ```
 
 ### **3. Verify Installation**
 ```bash
-python -c "import streamlit, PyPDF2, google.generativeai, pymongo; print('✅ All dependencies installed successfully')"
+python3 -c "import streamlit, PyPDF2, google.generativeai, pymongo; print('✅ All dependencies installed successfully')"
 ```
 
-### **4. Run Tests (Optional)**
+### **4. Run Tests**
 ```bash
-cd tests
-python test_vector_search.py
+python3 -m unittest discover tests
 ```
 
 ## Configuration
 
-1. Set up gemini API key:
+1. Set up Gemini and MongoDB secrets:
 - Create a `.streamlit/secrets.toml` file in the project directory
 - Add your API key and secrets:
   ```toml
@@ -121,7 +128,13 @@ python test_vector_search.py
   ```
 - Do not commit this file to version control
 
+You can also copy `.streamlit/.example.secrets.toml` as a starting point if present.
+
 2. Ensure you have project created in Google Cloud with valid billing.
+
+3. Optional degraded modes:
+- If `mongoDB_URI` is missing or unreachable, the app runs in local JSON fallback mode at `.streamlit/local_db.json`.
+- If `API_KEY` is missing, the app still starts, but generation controls are disabled until the key is configured.
 
 ## Usage
 
@@ -138,15 +151,18 @@ python test_vector_search.py
 
 4. **Upload PDF Document**: Upload your SOP-based PDF file for AI-powered analysis and summarization
 
-5. **Generate Automation**: Click "Generate Automation" to create:
+5. **Generate Automation**: Click "Generate Complete Automation" to create:
+   - **Document Summary**: Generated by the agent workflow
    - **Professional Flowchart**: Interactive Mermaid diagram with proper symbols
    - **Automation Script**: Executable code tailored to your requirements
+   - **Unit Tests**: Test scaffolding for the generated script
    - **Prerequisites List**: Comprehensive setup and dependency requirements
+   - **Validation Report**: Mermaid, script, and test validation status
 
 6. **Review and Refine**: 
-   - Examine the generated flowchart, script, and prerequisites
-   - Use the regenerate option with additional context for improved precision
-   - Download the flowchart for external use
+   - Watch the Agent Console for progress and validation events
+   - Examine the generated summary, flowchart, script, tests, and prerequisites
+   - Download individual artifacts or the combined automation package
 
 7. **Interactive Features**:
    - Switch between different complexity levels
@@ -162,6 +178,7 @@ The application follows a modular structure with advanced vector search capabili
 Automation-Generator/
 ├── app.py                      # Main Streamlit application with enhanced UI
 ├── utils/
+│   ├── agent_service.py        # Agent-style orchestration, validation, retries, and event streaming
 │   ├── GeminiFunctions.py      # AI integration and content generation
 │   ├── mermaid_renderer.py     # Professional flowchart generation with proper symbols
 │   ├── MongoDBFunctions.py     # Enhanced database operations with vector search
@@ -169,6 +186,8 @@ Automation-Generator/
 │   ├── vector_admin.py         # Admin interface for vector search management
 │   └── validators.py           # Input validation utilities
 ├── tests/
+│   ├── test_agent_workflow.py  # Agent orchestration and validation tests
+│   ├── test_local_fallback.py  # Local JSON fallback tests
 │   ├── test_vector_search.py   # Vector search testing utilities
 │   └── test_secrets_password.py # Secrets configuration testing
 └── README.md
@@ -177,9 +196,11 @@ Automation-Generator/
 ### 🔧 **Key Components:**
 
 - **Vector Search System**: MongoDB Atlas Vector Search with Gemini embeddings
+- **AutomationAgentService**: Coordinates generation steps, emits safe progress events, validates outputs, and retries failed components
 - **GeminiEmbeddingService**: 768-dimensional vector generation using `gemini-embedding-001`
 - **Smart Search Fallbacks**: Vector → Hybrid → Text → Regex search chain
 - **MermaidRenderer**: Enhanced flowchart generation with proper symbols
+- **Local JSON Fallback**: Saves and searches generated solutions locally when MongoDB is unavailable
 - **Secure Admin Interface**: Password-protected admin tools and migration controls
 - **Hybrid Search**: Combines semantic vector search with traditional text search
 - **Migration System**: Batch processing for existing document embedding generation
@@ -217,9 +238,10 @@ Automation-Generator/
 ### **Local Development**
 - Ensure all dependencies are installed
 - Set up `.streamlit/secrets.toml` with your API key
-- Create MongoDB vector search index
+- Create MongoDB vector search index if using Atlas search
 - Run `streamlit run app.py`
 - Access admin interface for testing and migration
+- Run `python3 -m unittest discover tests` before committing changes
 
 ### **MongoDB Atlas Requirements**
 - **Cluster**: M10+ recommended for vector search
@@ -254,6 +276,7 @@ Automation-Generator/
 - **Vector Search**: < 2 seconds response time
 - **Flowchart Rendering**: Supports complex diagrams with multiple decision points
 - **AI Generation**: 10-30 seconds depending on complexity
+- **Agent Validation**: Adds retries only when generated Mermaid, scripts, or tests fail validation
 - **Search Accuracy**: 80%+ improvement in semantic relevance
 - **Migration**: Batch processing with rate limiting
 
@@ -265,7 +288,15 @@ Automation-Generator/
 
 ## 📈 **Version History & Updates**
 
-### **🎉 Version 1.0 - Production Ready! (Current)**
+### **🎉 Version 2.1 - Agentic Workflow Ready! (Current)**
+✅ **Agent Service Boundary**: Added `utils/agent_service.py` with request/result/event models  
+✅ **Agent Console**: Streamlit generation flow now streams safe operational events  
+✅ **Self-Healing Validation**: Mermaid and Python outputs are validated and retried before display  
+✅ **Credential-Safe Startup**: Missing Gemini or MongoDB secrets no longer hard-stop the whole app  
+✅ **Local Fallback Improvements**: Local saves now include unit tests, UUIDs, and broader field search  
+✅ **Focused Tests**: Added unit tests for agent orchestration and local fallback behavior  
+
+### **🎉 Version 2.0 - Vector Search Production Ready**
 ✅ **Vector Search System**: MongoDB Atlas Vector Search with Gemini embeddings  
 ✅ **Semantic Search**: Find solutions by meaning, not just keywords  
 ✅ **Smart Fallbacks**: 4-tier search system ensures results (Vector → Hybrid → Text → Regex)  
@@ -287,7 +318,8 @@ Automation-Generator/
 ✅ **Performance Optimization**: Smart caching and rate limiting  
 ✅ **Modular Design**: Organized code structure in `utils/` folder for maintainability  
 
-### **🚀 Coming in Version 2.0**
+### **🚀 Coming Next**
+- Confirm and wire the real Google Antigravity SDK API when available in the runtime
 - Query result caching for cost optimization
 - Advanced analytics and search usage patterns
 - Enhanced bulk operations and management tools
@@ -301,11 +333,17 @@ Automation-Generator/
 
 ### **📋 Additional Resources**
 - `VECTOR_SEARCH_DEPLOYMENT.md` - Complete deployment guide
-- `VERSION_1_COMPLETE.md` - Implementation status and features
+- `implementation_plan_revised.md` - Current agentic implementation plan
+- `utils/agent_service.py` - Agent orchestration implementation
+- `tests/test_agent_workflow.py` - Agent workflow tests
+- `tests/test_local_fallback.py` - Local fallback tests
 - `tests/test_vector_search.py` - Testing utilities and examples
 - `tests/test_secrets_password.py` - Secrets configuration validation
 
 ### **🛠️ Troubleshooting**
+- **Generation Disabled**: Add `API_KEY` to `.streamlit/secrets.toml`
+- **Local Storage Mode**: Add or fix `mongoDB_URI` to use MongoDB Atlas instead of `.streamlit/local_db.json`
+- **Agent SDK Unavailable**: The app currently uses the local agent orchestration boundary when `google-antigravity` is not importable
 - **Vector Search Issues**: Check MongoDB Atlas index configuration
 - **API Errors**: Verify Gemini API key and billing setup
 - **Admin Access**: Ensure correct password in secrets.toml
@@ -320,4 +358,4 @@ Automation-Generator/
 
 ---
 
-*🎊 **Status**: Production Ready | Vector Search: Fully Implemented | Security: Admin Protected*
+*🎊 **Status**: Agentic Workflow Ready | Vector Search: Implemented | Security: Admin Protected*
